@@ -173,6 +173,23 @@ static void YxAppConnectToServerTimeOut(void);
 #define MMI_FRAMEBUFFER_PANEL_WIDTH		64
 #define MMI_FRAMEBUFFER_PANEL_HIGH		128
 
+#define MMI_FRAMEBUFFER_SIGNAL_X		45
+#define MMI_FRAMEBUFFER_SIGNAL_Y		0
+
+#define MMI_FRAMEBUFFER_BATTERY_X		10
+#define MMI_FRAMEBUFFER_BATTERY_Y		0
+
+
+#define MMI_FRAMEBUFFER_MAINPAGE_DATE_X		0
+#define MMI_FRAMEBUFFER_MAINPAGE_DATE_Y		30
+
+#define MMI_FRAMEBUFFER_MAINPAGE_CLOCK_X	12
+#define MMI_FRAMEBUFFER_MAINPAGE_CLOCK_Y	(MMI_FRAMEBUFFER_MAINPAGE_DATE_Y+MMI_FRAMEBUFFER_FONT_HIGH)
+
+#define MMI_FRAMEBUFFER_MAINPAGE_WEEK_X		8
+#define MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y		(MMI_FRAMEBUFFER_MAINPAGE_CLOCK_Y + MMI_FRAMEBUFFER_FONT_HIGH + 8)
+
+
 #define MMI_FRAMEBUFFER_DATA_COUNT		(MMI_FRAMEBUFFER_PANEL_WIDTH/MMI_FRAMEBUFFER_DATA_WIDTH)
 
 
@@ -202,43 +219,26 @@ void mmiFrameBufferDisplayFont(int x, int y, U16 FontCode);
  * SI_EARPHONE.bmp signal 4 IMG_SI_EARPHONE_INDICATOR
  */
 
-void mmiFrameBufferDisplayControls_Signal(void)
+void mmiFrameBufferDisplayControls_Signal(U8 u8Signal)
 {
 	unsigned char temp;
-	U8 xinhao = YxAppGetSignalLevelInPercent();
-	temp = xinhao/10;
-	
+	temp = u8Signal/10;	
 	
 	switch(temp)
 	{
-		case 0:gdi_image_draw_id(32, 127-16, IMG_SI_VIBRATE);
+		case 0:gdi_image_draw_id(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, IMG_SI_VIBRATE);
 			break;
-		case 1:gdi_image_draw_id(32, 127-16, IMG_SI_UNREAD_VOICE);
+		case 1:gdi_image_draw_id(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, IMG_SI_UNREAD_VOICE);
 			break;
-		case 2:gdi_image_draw_id(32, 127-16, IMG_SI_VIBRATE_THEN_RING);
+		case 2:gdi_image_draw_id(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, IMG_SI_VIBRATE_THEN_RING);
 			break;
-		case 3:gdi_image_draw_id(32,  127-16, IMG_SI_CIRCLE_INDICATOR);
+		case 3:gdi_image_draw_id(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, IMG_SI_CIRCLE_INDICATOR);
 			break;
-		case 4:gdi_image_draw_id(32, 127-16, IMG_SI_EARPHONE_INDICATOR);
+		case 4:gdi_image_draw_id(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, IMG_SI_EARPHONE_INDICATOR);
 			break;
 		default :
-			gdi_image_draw_id(32, 127-16, IMG_SI_EARPHONE_INDICATOR);
+			gdi_image_draw_id(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, IMG_SI_EARPHONE_INDICATOR);
 			break;
-			#if 0
-		case 5:gdi_image_draw_id(32, 127-16, IMG_SI_GPRS_ATT_NO_PDP_INDICATOR);
-			break;
-		case 6:gdi_image_draw_id(32, 127-16, IMG_SI_LINE_L1);
-			break;
-		case 7:gdi_image_draw_id(32, 127-16, IMG_SI_LINE_L1);
-			break;
-		case 8:gdi_image_draw_id(32, 127-16, IMG_SI_KEYPAD_LOCK);
-			break;
-		case 9:
-		case 10:
-				gdi_image_draw_id(32,  127-16, IMG_SI_KEYPAD_LOCK);
-			break;
-			#endif
-
 	}
 }
 
@@ -249,36 +249,52 @@ void mmiFrameBufferDisplayControls_Signal(void)
  * SI_MGE_FULL	battery	3	IMG_SI_FULL_SMS_INDICATOR
  */
 
-void mmiFrameBufferDisplayControls_Battery(void)
+void mmiFrameBufferDisplayControls_Battery(U8 u8Battery)
 {
-	U8 dianliang=srv_charbat_get_battery_level();
-	switch(dianliang)
+	//U8 u8Battery = srv_charbat_get_battery_level();
+	switch(u8Battery)
 	{
 	case 0:
 	case 1:
 	case 2:
-			gdi_image_draw_id(32, 0, IMG_SI_ALARM_ACTIVATED);
+		gdi_image_draw_id(MMI_FRAMEBUFFER_BATTERY_X, MMI_FRAMEBUFFER_BATTERY_Y, IMG_SI_ALARM_ACTIVATED);
 		break;
 	case 3:
-		gdi_image_draw_id(32, 0, IMG_SI_MUTE);
+		gdi_image_draw_id(MMI_FRAMEBUFFER_BATTERY_X, MMI_FRAMEBUFFER_BATTERY_Y, IMG_SI_MUTE);
 		break;
 	case 4:
-		gdi_image_draw_id(32, 0, IMG_SI_KEYPAD_LOCK);
+		gdi_image_draw_id(MMI_FRAMEBUFFER_BATTERY_X, MMI_FRAMEBUFFER_BATTERY_Y, IMG_SI_KEYPAD_LOCK);
 		break;
 	case 5:
-		gdi_image_draw_id(32, 0, IMG_SI_FULL_SMS_INDICATOR);
+		gdi_image_draw_id(MMI_FRAMEBUFFER_BATTERY_X, MMI_FRAMEBUFFER_BATTERY_Y, IMG_SI_FULL_SMS_INDICATOR);
 		break;
 	case 6:
-		gdi_image_draw_id(32, 0, IMG_SI_FULL_SMS_INDICATOR);
+		gdi_image_draw_id(MMI_FRAMEBUFFER_BATTERY_X, MMI_FRAMEBUFFER_BATTERY_Y, IMG_SI_FULL_SMS_INDICATOR);
 		break;
 		
 	}
 }
 
+static U8 u8ChargingStatus = 2;
+
+void mmiFrameBufferChargingDisplayData(void) {
+	StopTimer(APOLLO_MMI_FRAMEBUFFER_CHARGINE_TIMER);
+
+	mmiFrameBufferDisplayControls_Battery(u8ChargingStatus);
+
+	u8ChargingStatus = (++u8ChargingStatus > 6 ? 2 : u8ChargingStatus);
+	
+	StartTimer(APOLLO_MMI_FRAMEBUFFER_CHARGINE_TIMER, 500, mmiFrameBufferChargingDisplayData);
+}
+
+void mmiFrameBufferCharging(void) {
+	StartTimer(APOLLO_MMI_FRAMEBUFFER_CHARGINE_TIMER, 500, mmiFrameBufferChargingDisplayData);
+}
+
 void mmiFrameBufferScroll(void) {
 	int i = 0, j = 0;
 	
-	StopTimer(APOLLO_MMI_FRAMEBUFFER_TIMER);
+	StopTimer(APOLLO_MMI_FRAMEBUFFER_SCROLL_TIMER);
 	//clear
 	for (i = 0;i < MMI_FRAMEBUFFER_FONT_HIGH;i ++) {
 		for (j = 0;j < MMI_FRAMEBUFFER_PANEL_WIDTH;j ++) {
@@ -297,7 +313,7 @@ void mmiFrameBufferScroll(void) {
 	u8ScrollDisplayIndex ++;
 
 	gdi_layer_blt_previous(0, 0, MMI_FRAMEBUFFER_PANEL_WIDTH, MMI_FRAMEBUFFER_PANEL_HIGH);
-	StartTimer(APOLLO_MMI_FRAMEBUFFER_TIMER, 500, mmiFrameBufferScroll);
+	StartTimer(APOLLO_MMI_FRAMEBUFFER_SCROLL_TIMER, 500, mmiFrameBufferScroll);
 }
 
 void mmiFrameBufferScrollDisplayData(int x, int y, U8 *u8NumString, int length) {
@@ -308,8 +324,92 @@ void mmiFrameBufferScrollDisplayData(int x, int y, U8 *u8NumString, int length) 
 	u8ScrollDisplayLength = length;
 	u8ScrollDisplayHigh = y;
 	
-	StartTimer(APOLLO_MMI_FRAMEBUFFER_TIMER, 500, mmiFrameBufferScroll);
+	StartTimer(APOLLO_MMI_FRAMEBUFFER_SCROLL_TIMER, 500, mmiFrameBufferScroll);
 }
+
+void mmiFrameBufferDisplayStatusBar(void) {
+	U8 u8Battery = srv_charbat_get_battery_level();
+	U8 u8Signal = YxAppGetSignalLevelInPercent();
+	
+	mmiFrameBufferDisplayControls_Battery(u8Battery);
+	mmiFrameBufferDisplayControls_Signal(u8Signal);
+}
+
+
+
+U8 mmiFrameBufferDisplayData(int x, int y, U32 u32Data, U8 bZero) {
+	U8 u8BitCount = 0, i;
+	U32 u32TempData = u32Data;
+
+	do { u8BitCount++; }while (u32TempData /= 10);
+
+	if (bZero && (u8BitCount == 1)) {
+		mmiFrameBufferDisplayFont(x, y, DB_DATA_0);
+		mmiFrameBufferDisplayFont(x+MMI_FRAMEBUFFER_DATA_WIDTH, y, (u32Data % 10) + DB_DATA_0);
+		u8BitCount = 2; 
+	} else {
+		for (i = u8BitCount;i > 0;i --) {
+			mmiFrameBufferDisplayFont((x+(i-1)*MMI_FRAMEBUFFER_DATA_WIDTH), y, (u32Data % 10) + DB_DATA_0);
+			u32Data /= 10;
+		}
+	}
+	return u8BitCount;
+}
+
+void mmiFrameBufferMainPageDateDisplay(applib_time_struct *pDt) {
+	U8 u8BitCnt = 0, u8TempCut;
+
+	u8BitCnt = mmiFrameBufferDisplayData(MMI_FRAMEBUFFER_MAINPAGE_DATE_X, MMI_FRAMEBUFFER_MAINPAGE_DATE_Y ,(U32)(pDt->nYear-2000), 1);
+
+	mmiFrameBufferDisplayFont((MMI_FRAMEBUFFER_MAINPAGE_DATE_X+u8BitCnt*MMI_FRAMEBUFFER_DATA_WIDTH), MMI_FRAMEBUFFER_MAINPAGE_DATE_Y, DB_SYMBOL_SLASH);
+	u8BitCnt += 1;
+	
+	u8TempCut = mmiFrameBufferDisplayData((MMI_FRAMEBUFFER_MAINPAGE_DATE_X+u8BitCnt*MMI_FRAMEBUFFER_DATA_WIDTH), MMI_FRAMEBUFFER_MAINPAGE_DATE_Y, (U32)(pDt->nMonth), 1);
+	u8BitCnt += u8TempCut;
+
+	mmiFrameBufferDisplayFont((MMI_FRAMEBUFFER_MAINPAGE_DATE_X+u8BitCnt*MMI_FRAMEBUFFER_DATA_WIDTH), MMI_FRAMEBUFFER_MAINPAGE_DATE_Y, DB_SYMBOL_SLASH);
+	u8BitCnt += 1;
+
+	u8TempCut = mmiFrameBufferDisplayData((MMI_FRAMEBUFFER_MAINPAGE_DATE_X+u8BitCnt*MMI_FRAMEBUFFER_DATA_WIDTH), MMI_FRAMEBUFFER_MAINPAGE_DATE_Y, (U32)(pDt->nDay), 1);
+	u8BitCnt += u8TempCut;
+}
+
+void mmiFrameBufferMainPageClockDisplay(applib_time_struct *pDt) {
+	U8 u8BitCnt = 0, u8TempCut;
+
+	u8BitCnt = mmiFrameBufferDisplayData(MMI_FRAMEBUFFER_MAINPAGE_CLOCK_X, MMI_FRAMEBUFFER_MAINPAGE_CLOCK_Y ,(U32)(pDt->nHour), 1);
+
+	mmiFrameBufferDisplayFont((MMI_FRAMEBUFFER_MAINPAGE_CLOCK_X+u8BitCnt*MMI_FRAMEBUFFER_DATA_WIDTH), MMI_FRAMEBUFFER_MAINPAGE_CLOCK_Y, DB_SYMBOL_COLON);
+	u8BitCnt += 1;
+
+	
+	u8TempCut = mmiFrameBufferDisplayData((MMI_FRAMEBUFFER_MAINPAGE_CLOCK_X+u8BitCnt*MMI_FRAMEBUFFER_DATA_WIDTH), MMI_FRAMEBUFFER_MAINPAGE_CLOCK_Y ,(U32)(pDt->nMin), 1);
+	u8BitCnt += u8TempCut;
+}
+
+void mmiFrameBufferMainPageWeekDisplay(applib_time_struct *pDt) {
+	U8 u8Week = ((pDt->nYear % 1000) + ((pDt->nYear % 1000) / 4) - (2 * (pDt->nYear / 100)) + (26 * (pDt->nMonth + 1) / 10) + pDt->nDay - 1) % 7;
+
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_MAINPAGE_WEEK_X, MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y, DB_FONT_XING);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_MAINPAGE_WEEK_X + MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y, DB_FONT_QI);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_MAINPAGE_WEEK_X + 2 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y, DB_FONT_RI+u8Week);
+}
+
+void mmiFrameBufferMainPageTimeDisplay(void) {
+	applib_time_struct   dt;
+	applib_dt_get_date_time(&dt);
+
+	mmiFrameBufferMainPageDateDisplay(&dt);
+	mmiFrameBufferMainPageClockDisplay(&dt);
+	mmiFrameBufferMainPageWeekDisplay(&dt);
+}
+
+void mmiFrameBufferMainPageDisplay(void) {
+	mmiFrameBufferDisplayStatusBar();
+	mmiFrameBufferMainPageTimeDisplay();
+}
+
+
 
 void mmiFrameBufferClearDisplay(void) {	
 	clear_screen_with_color(UI_COLOR_BLACK);
@@ -367,9 +467,11 @@ void mmiFrameBufferReflush(void) {
 			}
 			gdi_layer_blt_previous(0, 0, 63, 127);
 			#endif
-			mmiFrameBufferDisplayControls_Battery();
-			mmiFrameBufferDisplayControls_Signal();
-			mmiFrameBufferScrollDisplayData(0, 80, "12345687234", strlen("12345687234"));
+			//mmiFrameBufferDisplayControls_Battery();
+			//mmiFrameBufferDisplayControls_Signal();
+			//mmiFrameBufferCharging();
+			//mmiFrameBufferScrollDisplayData(0, 80, "12345687234", strlen("12345687234"));
+			mmiFrameBufferMainPageDisplay();
 			break;
 		}
 	}
