@@ -152,10 +152,15 @@ void YxAppStepRunMain(U16 runKind)
 	}
 }
 
+extern int ApolloWatchConfig(void);
+extern WatchConf WatchInstance;
 void YxAppIdleInition(void)
 {
 #if ENABLE_MMI_FRAMEBUFFER //Update By WangBoJing 20160327
 	mmiFrameBufferInit();
+#endif
+#if ENABLE_MMI_KEYPAD
+	mmiKeyPadInit();
 #endif
 	if((yxAppParam)&&(yxAppParam->allIsReady==1))
 		return;
@@ -172,6 +177,7 @@ void YxAppIdleInition(void)
 #if (YX_PROTOCOL_KIND==1)
 	YxProtocolInition();
 #endif
+	ApolloWatchConfig();
 	YxAppStartSecondTimer(1);
 	yxAppExit = 0;
 	yxAppParam->sleephandle = L1SM_GetHandle();

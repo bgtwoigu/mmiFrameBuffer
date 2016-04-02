@@ -104,6 +104,8 @@ extern "C"
 #define ENABLE			1
 #define DISABLE			0
 #define ENABLE_MMI_FRAMEBUFFER		ENABLE
+#define ENABLE_MMI_KEYPAD			ENABLE
+#define ENABLE_MMI_WATCHCONF		ENABLE
 
 
 //msg command kind    
@@ -116,6 +118,127 @@ extern "C"
 #define  YX_MSG_MAINAPP_TICK_CTRL    7 //分钟TICK
 #define  YX_MSG_MAINAPP_SECOND_CTRL  8 //秒钟TICK
 #define  YX_MSG_START_POS_CTRL       9 //立即定位
+#ifndef APOLLO_KEY //Update By WangBoJing 20150915
+#define APOLLO_KEY
+
+#define APOLLO_UPKEY_EVENT_SINGLE_UP			0x0A
+#define APOLLO_UPKEY_EVENT_SINGLE_DOWN		0x0B
+#define APOLLO_UPKEY_EVENT_REPEAT_UP		0x0C
+#define APOLLO_UPKEY_EVENT_REPEAT_DOWN		0x0D
+#define APOLLO_PLAY_RECV_VOICE_DATA			0x0E
+
+#define APOLLO_UART1							0x1A
+#define APOLLO_UART2							0x1B
+#define APOLLO_UART3							0x1C
+
+#define APOLLO_MSG_BLUETOOTH_POWERDOWN 		0x01
+#define APOLLO_MSG_BLUETOOTH_SETUP  			0x02
+#define APOLLO_MSG_WATCH_POWERDOWN 			0x03
+#define APOLLO_MSG_TELEPHONEFARE_SELECT  	0x04
+#define APOLLO_MSG_REALTIME_GPS_LOCATION 	0x05
+
+#define APOLLO_MSG_SEATCH_WATCH 				0x06
+#define APOLLO_MSG_ELECTIRC_FENCE			0x07
+#define APOLLO_MSG_REFUSE_CALL_SETON			0x08
+#define APOLLO_MSG_REFUSE_CALL_SETOFF  		0x09
+
+
+#define APOLLO_MSG_STOP_RECORDER			APOLLO_UPKEY_EVENT_REPEAT_UP
+#define APOLLO_MSG_START_RECORDER			APOLLO_UPKEY_EVENT_REPEAT_DOWN
+
+#define APOLLO_MSG_AUTO_CONNECT_SETON 		0x10
+#define APOLLO_MSG_AUTO_CONNECT_SETOFF 		0x11
+#define APOLLO_MSG_SHAKE_CONNECT_SETON 		0x12
+#define APOLLO_MSG_SHAKE_CONNECT_SETOFF	 	0x13
+#define APOLLO_MSG_HANDON_RECOGNITION_SETON  0x14
+#define APOLLO_MSG_HANDON_RECOGNITION_SETOFF 0x15
+
+#define APOLLO_MSG_MUTE_SETON				0x16
+#define APOLLO_MSG_MUTE_SETOFF				0x17
+
+#define APOLLO_MSG_LISTEN_MODE				0x18
+
+
+
+	
+#define APOLLO_MSG_LANGUAGE_CHINESE 	 		0x20
+#define APOLLO_MSG_LANGUAGE_ENGLISH 			0x21
+#define APOLLO_MSG_LANGUAGE_RESSION 			0x22
+
+#define APOLLO_MSG_TIMEZONE_1 				0x41
+#define APOLLO_MSG_TIMEZONE_2	 			0x42
+
+#define APOLLO_MSG_LED_ON						0x58
+
+/* ** **** ********  ****************  MESSAGE  ****************  ******** **** ** */
+
+#define APOLLO_MSG_REALTIME_POS				0x01
+#define APOLLO_MSG_VOICE_RECV				0x02
+#define APOLLO_MSG_COUNT_STEP_SETON			0x03
+#define APOLLO_MSG_COUNT_STEP_SETOFF		0x04
+#define APOLLO_MSG_SLEEP_QUALITY_SETON		0x05
+#define APOLLO_MSG_SLEEP_QUALITY_SETOFF		0x06
+#define APOLLO_MSG_SET_PHONENUMBER			0x07
+#define APOLLO_MSG_CLOCKALARM				0x08
+#define APOLLO_MSG_SAFEZONE_ALARM			0x09
+#define APOLLO_MSG_LONGSAT_ALARM			0x0A
+#define APOLLO_MSG_LOWPOWER_ALARM			0x0B
+
+#define APOLLO_MSG_FAMILYNUMBER_SET			0x41
+#define APOLLO_MSG_CONTRACT_SET				0x42
+#define APOLLO_MSG_PHONEBOOK_SET			0x43
+#define APOLLO_MSG_FREQ_SET					0x44
+
+#define APOLLO_MSG_SOS_MSGREMAINER_OPEN		0x51
+#define APOLLO_MSG_SOS_MSGREMAINER_CLOSE	0x52
+#define APOLLO_MSG_POWER_MSGREMAINDER_OPEN	0x53
+#define APOLLO_MSG_POWER_MSGREMAINDER_CLOSE 0x54
+
+#define APOLLO_MSG_ALARMMUSIC_OPEN			0x61
+#define APOLLO_MSG_ALARMMUSIC_CLOSE			0x62
+#define APOLLO_MSG_SAFEZONEMUSIC_OPEN		0x63
+#define APOLLO_MSG_SAFEZONEMUSIC_CLOSE		0x64
+
+#define APOLLO_MSG_SOS_CLEAR				0x21
+#define APOLLO_MSG_PHONEFARE_SELECT			0x2A
+
+
+#define APOLLO_MSG_BLUETOOTH_UPLOAD			0x91
+#define APOLLO_MSG_BLUETOOTH_DOWNLOAD 		0x92
+#define APOLLO_MSG_SERIALPORT_SEND			0x93
+#define APOLLO_MSG_SERIALPORT_RECV			0x94
+
+#define APOLLO_BURN_KEY_MSG					0xA0
+
+
+
+#define APOLLO_MSG_BUZZER_DEVICE_OPEN		0x81
+#define APOLLO_MSG_BUZZER_DEVICE_CLOSE		0x82
+#define APOLLO_MSG_LIGHT1_DEVICE_OPEN		0x83
+#define APOLLO_MSG_LIGHT1_DEVICE_CLOSE		0x84
+#define APOLLO_MSG_LIGHT2_DEVICE_OPEN		0x85
+#define APOLLO_MSG_LIGHT2_DEVICE_CLOSE		0x86
+
+/* ** **** ********  ****************  INDEX  ****************  ******** **** ** */
+
+#define IDX_PHONE_INDEX						4
+#define IDX_PHONE_NUMBER					5
+
+
+#define ITEM_SIZE		64
+
+#define FAMILY_NUMBER_SIZE		2
+#define CONTACT_NUMBER_SIZE		10
+#define PHONE_BOOK_SIZE			10
+#define PHONE_NUMBER_LENGTH		20
+
+#define  APOLLO_WATCH_CONF_SIZE		2*1024
+#define  APOLLO_WATCH_CONF_FILE		L"\\watch.conf"
+#define  APOLLO_SERVER_IP_FILE		L"\\server.conf"
+
+
+
+#endif
 
 //msg user data kind
 //bt operation
@@ -149,8 +272,12 @@ extern "C"
 #define  YX_RUNKIND_OWNER_GPS    0x8000  //period upload data by timer
 #define  YX_RUNKIND_OWNER_HEART  0x4000  //心跳包
 //max 
+#define APOLLO_RUNKIND_HEART_COMPLETE 	0x2000
 
-#define  YX_APP_CALL_NUMBER_MAX_LENGTH   12
+#define APOLLO_RUNKIND_VOICE_UPLOAD		0x0020
+#define APOLLO_RUNKIND_VOICE_DOWNLOAD	0x0040
+
+#define  YX_APP_CALL_NUMBER_MAX_LENGTH   20
 #define  YX_APP_CALL_NAMES_MAX_LENGTH    10
 
 #define  YX_CHECK_MONITOR_INFOR(a,n) (!a || !a||(strlen((S8*)a)<5)||(strlen((S8*)a)>YX_APP_CALL_NUMBER_MAX_LENGTH)||(n[0]==0&&n[1]==0))
@@ -227,6 +354,8 @@ typedef struct
 	U8         sendCount;              /*最大重发次数,为FF时,不需要重发*/
 	U8         sendBuf[YX_SOCK_BUFFER_LEN];
 	U8         readBuffer[YX_SOCK_READ_BUFFER_LEN];
+	S32 		readLen;
+	S32 		readIndex;
 	S32        sendLen;
 	S32        curSendLen;
 }YXAPPSOCKDATAPARAM;
@@ -307,6 +436,8 @@ typedef struct
 
 #define  YX_UPLOAD_KIND_HEART        0x01  //心跳包
 #define  YX_UPLOAD_KIND_GPS          0x02  //定位包
+#define YX_UPLOAD_KIND_VOICE		0x03
+#define YX_DOWNLOAD_KIND_VOICE		0x04
 
 typedef struct
 {
@@ -382,6 +513,22 @@ typedef struct
 	kal_uint8    action;
 	kal_uint16   value;//efence的序号,or,低电量的值or语音监听的号码值,固定为4位,不足补0
 }YXLOGPARAM;
+
+#if ENABLE_MMI_WATCHCONF
+typedef struct _WATCHCONF {
+	char u8StepFlag;
+	char u8SleepFlag;
+	char u8SOSMsgFlag;
+	char u8PowerMsgFlag;
+	char u8AlarmMusicFlag;
+	char u8SafeZoneMusic;
+	char u8Freq;
+	char u8FamilyNumber[FAMILY_NUMBER_SIZE][PHONE_NUMBER_LENGTH];
+	char u8ContactNumber[CONTACT_NUMBER_SIZE][PHONE_NUMBER_LENGTH];
+	char u8PhoneBook[PHONE_BOOK_SIZE][PHONE_NUMBER_LENGTH];
+} WatchConf;
+#endif
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //basic api
 extern void *YxAppMemMalloc(kal_int32 size);
