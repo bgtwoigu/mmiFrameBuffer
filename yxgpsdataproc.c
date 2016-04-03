@@ -24,7 +24,7 @@
 #define PI  3.1415926
 #define YXAPP_EARTH_RADIUS     6378.137
 
-static YXGPSPARAMSTR  yxGpsParam;
+YXGPSPARAMSTR  yxGpsParam;
 static U16 yxGpsCurrentCircle = 0;
 #if(YX_IS_TEST_VERSION!=0)
 static char yxGpsLedFrame = 0;
@@ -72,7 +72,7 @@ static void GpsPlayFlashLed(void)
 }
 #endif
 #endif
-static void GpsResetValues(void)
+void GpsResetValues(void)
 {
 	yxGpsParam.gpstatus[0] = 0;
 	yxGpsParam.gpstatus[1] = 0;
@@ -144,6 +144,8 @@ static char GpsChecksumValue(U8 *buffer,U16 maxLen)
 		return 1;
 	return 0;
 }
+
+extern void gps_ready(void);
 
 static U8 GpsGetJWTimeValue(U8 kind,U8 *buffer,U8 timep,U8 wjpos,U16 len,char validjw)
 {
@@ -229,6 +231,11 @@ static U8 GpsGetJWTimeValue(U8 kind,U8 *buffer,U8 timep,U8 wjpos,U16 len,char va
 		if(buffer[i]=='W')
 			tempv *= -1;
 		yxGpsParam.longitudev[kind] = tempv;
+
+
+		gps_ready();
+
+		
 #if(YX_IS_TEST_VERSION!=0)
 		sprintf(logBuf,"longitude:%.6f\r\n",tempv);
 		YxAppTestUartSendData((U8*)logBuf,(U16)strlen(logBuf));
@@ -242,13 +249,14 @@ static U8 GpsGetJWTimeValue(U8 kind,U8 *buffer,U8 timep,U8 wjpos,U16 len,char va
 
 static U8 GpsUartOneLineDataProc(U8 *buffer,U16 len)
 {
-#if(YX_IS_TEST_VERSION!=0)
+#if 1//(YX_IS_TEST_VERSION!=0)
 	if(len >0 && len<100)
 	{
 		char  dBuffer[100];
 		memcpy((void*)dBuffer,(void*)buffer,len);
 		dBuffer[len] = 0x00;
-		YxAppTestUartSendData((U8*)dBuffer,len);
+		//YxAppTestUartSendData((U8*)dBuffer,len);
+		kal_prompt_trace(MOD_YXAPP, "bbbb %s", dBuffer);
 	}
 #endif
 	if(GpsChecksumValue(buffer,len)==1)
@@ -285,8 +293,10 @@ static U8 GpsUartOneLineDataProc(U8 *buffer,U16 len)
 			}
 			if(buffer[i]==',')
 				return 0;//not ready
+#if 1 //Update By WangBoJing 
 			else if(buffer[i]=='0')
 				validdata = 0;
+#endif
 			if(validdata)
 			{
 				j = 0;
@@ -302,18 +312,20 @@ static U8 GpsUartOneLineDataProc(U8 *buffer,U16 len)
 					yxGpsParam.hightv[kind] = 0.0;
 				else
 				{
-					U8   tembuf[18];
+					U8   tembuf[18] = {0};
 					j = 0;
-					while((j<18)&&buffer[i] !=',')
+
+					while((j<18) && (buffer[i] !=','))
 					{
 						tembuf[j++] = buffer[i++];
 						if(i >= len)
 							break;
 					}
-					tembuf[j] = 0x00;
-					if(tembuf[0]>0)
+					//tembuf[j] = 0x00;
+					if(j > 0)
 					{
 						yxGpsParam.hightv[kind] = atof((const char*)tembuf);
+						kal_prompt_trace(MOD_YXAPP," dddd high tv: %s\n", tembuf);
 #if(YX_IS_TEST_VERSION!=0)
 						sprintf(dblog,"height:%.4f\r\n",yxGpsParam.hightv[kind]);
 						YxAppTestUartSendData((U8*)dblog,strlen(dblog));
@@ -598,7 +610,7 @@ static U8 GpsUartOneLineDataProc(U8 *buffer,U16 len)
 	return 0;
 }
 
-static U8 GpsAllDataProc(U8 *rxbuffer,U16 len)
+U8 GpsAllDataProc(U8 *rxbuffer,U16 len)
 {
 	U16   i = 0;
 	U8    res = 0;

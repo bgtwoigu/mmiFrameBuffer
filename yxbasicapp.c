@@ -83,9 +83,12 @@
 #include "PhoneBookProt.h"
 #include "YxBasicApp.h"
 
+#include "mdi_audio.h"
+
 #if ENABLE_MMI_FRAMEBUFFER
 #include "mmiFrameBufferData.h"
 #endif
+//#include "ApolloProtocol.h"
 
 /////////////////////////////////////////////////////////user param config area///////////////////////////////////////////////
 
@@ -109,7 +112,7 @@
 /////////////////////////////////////////////////////////Global variants/////////////////////////////////////////////////////////////
 
 static  char yxDataPool[SRV_BT_CM_BD_FNAME_LEN+1];
-static  YXAPPSOCKDATAPARAM yxAppSockData;
+YXAPPSOCKDATAPARAM yxAppSockData;
 #ifdef __MMI_WLAN_FEATURES__
 static WLANMACPARAM wlanParams[WNDRV_MAX_SCAN_RESULTS_NUM];
 static U8 yxLocalWlanMac[WNDRV_MAC_ADDRESS_LEN];
@@ -127,7 +130,7 @@ static stack_timer_struct YxappTaskStackTimer;
 static YXAPPCELLPARAM yxCellParam;
 #endif
 static YXAPPSMSPARAM yxSmsParam;
-static YXAPPSOCKCONTEXT yxNetContext_ptr;
+YXAPPSOCKCONTEXT yxNetContext_ptr;
 static YXSYSTEMPARAM  yxSystemSet;
 #if(YX_GSENSOR_SURPPORT!=0)
 static YXGSENSORPARAM yxGsensorParam;
@@ -137,7 +140,20 @@ static YXEFENCEPARAM yxEfencePkg[YX_EFENCE_MAX_NUM];
 static YXFIREWALLPARAM yxFirewall;
 static YXLOGPARAM yxLogsPkg[YX_LOGS_MAX_NUM];
 static U16 yxPlayToneTick = 0;
+
 U16 u16WatchStatusFlag = 0x0000;
+
+#if 0
+#define FLAG_REFUSE_CALL			0x0001
+#define FLAG_AUTO_ACCEPT			0x0002
+#define FLAG_MUTE_MODE			0x0004
+#define FLAG_SHAKE_MODE			0x0008
+#define FLAG_HANDON_MODE			0x0010
+#define FLAG_MOTOR_MODE			0x0020
+#define FLAG_SHADDING_MODE		0x0040
+#define FLAG_ACCOMPANY_MODE		0x0080
+#endif
+
 #define FLAG_COUNTSTEP_MODE		0x0001
 #define FLAG_SLEEPQUALITY_MODE	0x0002
 
@@ -145,6 +161,8 @@ U16 u16WatchStatusFlag = 0x0000;
 #define FLAG_POWERMSG_MODE		0x0008
 #define FLAG_ALARMMUSIC_MODE	0x0010
 #define FLAG_SAFEZONEALARM_MODE	0x0020
+
+
 
 /////////////////////////////////////////////////////////static local functions////////////////////////////////////////////////////////
 
@@ -170,8 +188,76 @@ static void YxAppConnectToServerTimeOut(void);
 
 //extern void mmi_dtcnt_set_account_default_app_type(U32 acct_id, MMI_BOOL with_popup_result);
 
-#if ENABLE_MMI_WATCHCONF
-WatchConf WatchInstance = {0};
+/////////////////////////////////////////////////////////basic api//////////////////////////////////////////////////////////
+
+#if 0
+
+void YxAppSendMsgToMMIMod(U8 command,U8 param1,U8 param2)
+{
+	ilm_struct *ilm_ptr = NULL;//__GEMINI__
+	U8 *p = (U8*)construct_local_para(3,TD_CTRL);
+	p[0] = command;
+	p[1] = param1;
+	p[2] = param2;
+	ilm_ptr = allocate_ilm(MOD_MMI);//MOD_L4C
+	ilm_ptr->msg_id = MSG_ID_MMI_JAVA_UI_TEXTFIELD_HIDE_REQ;
+	ilm_ptr->local_para_ptr = (local_para_struct*)p;
+	ilm_ptr->peer_buff_ptr = NULL;
+
+	ilm_ptr->src_mod_id  = MOD_MMI;//MOD_L4C;
+	ilm_ptr->dest_mod_id = MOD_MMI;
+	ilm_ptr->sap_id = MOD_MMI;//MMI_L4C_SAP;
+	msg_send_ext_queue(ilm_ptr);
+}
+
+static void YxAppTimerMsgToMMIMod(void)
+{
+	ilm_struct *ilm_ptr = NULL;
+	ilm_ptr = allocate_ilm(MOD_MMI);
+	ilm_ptr->src_mod_id = MOD_MMI;
+	ilm_ptr->dest_mod_id = MOD_MMI;
+	ilm_ptr->sap_id = 0;
+	ilm_ptr->msg_id = MSG_ID_MMI_JAVA_UI_TEXTFIELD_HIDE_RSP;
+	ilm_ptr->local_para_ptr = NULL; /* local_para pointer */
+	ilm_ptr->peer_buff_ptr = NULL;  /* peer_buff pointer */
+    msg_send_ext_queue(ilm_ptr);
+}
+#endif
+
+#if(YX_GSENSOR_SURPPORT==1)//eint
+static void YxMMIProcGsensorMsgHdler(void *msg)
+{
+	if(yxGsensorParam.isReady==1)
+	{
+		kal_int16   x_adc = 0,y_adc = 0,z_adc = 0;
+		if(YxAppGsensorSampleData(&x_adc,&y_adc,&z_adc)==1)
+		{
+#if(YX_IS_TEST_VERSION!=0)
+			char logBuf[51];
+#endif
+#if(YX_IS_TEST_VERSION!=0)
+			sprintf(logBuf,"x_adc:%d,y_adc:%d,z_adc:%d\r\n",x_adc,y_adc,z_adc);
+			YxAppTestUartSendData((U8*)logBuf,strlen(logBuf));
+#endif
+		}
+	}
+	return;
+}
+#endif
+
+#if 0
+static void YxMMIProcTimerMsgHdler(void *msg)
+{
+	YxAppHeartTickProc();
+	return;
+}
+#endif
+
+#if 1 //Save Watch Configure
+
+
+WatchConf WatchInstance;
+
 
 void *ApolloRealloc(void* pVar, int Size) {
 	void *pNewVar = OslMalloc((Size+1)*sizeof(void*));
@@ -397,7 +483,7 @@ int ApolloWatchConfig(void) {
 	return 0;
 }
 
-
+ 
 U32 ApolloReadFile(U8 *data) {
 	char configFile[128];
 	U32 bytes_read = 0;
@@ -478,7 +564,6 @@ int ApolloWatchSave(void) {
 }
 void ApolloStartGPS(void);
 void ApolloStartLocationTimer(char timeType) {
-	#if 0
 	if (timeType == 1) {
 		StartTimer(APOLLO_GPS_ONOFF_TIMER, YX_HEART_TICK_UNIT * 120, ApolloStartGPS);
 	} else if (timeType == 2) {
@@ -488,7 +573,6 @@ void ApolloStartLocationTimer(char timeType) {
 	} else {
 		StartTimer(APOLLO_GPS_ONOFF_TIMER, YX_HEART_TICK_UNIT * 36, ApolloStartGPS);
 	}
-	#endif
 }
 
 #endif
@@ -1209,7 +1293,7 @@ static void YxMMIProcTimerMsgHdler(void *msg)
 	return;
 }
 #endif
-
+#if 0
 static void YxMMIProcMsgHdler(void *msg)
 {
 	U8    *command = (PU8)msg;
@@ -1343,6 +1427,351 @@ void YxAppMMiRegisterMsg(void)
 	SetProtocolEventHandler(YxMMIProcMsgHdler,MSG_ID_MMI_JAVA_UI_TEXTFIELD_HIDE_REQ);
 	//SetProtocolEventHandler(YxMMIProcTimerMsgHdler,MSG_ID_MMI_JAVA_UI_TEXTFIELD_HIDE_RSP);
 }
+
+#endif
+
+#if 1 //Update By WangBoJing 20150915
+
+#define VS_MM_BUFFER_SIZE 128
+#define MAX_RECORDER_SIZE	(30*1024)
+#define APOLLO_RECORDER_AMR			L"\\record.amr"
+
+#ifndef APOLLO_VOICE_FILENAME
+#define APOLLO_VOICE_FILENAME		L"\\voice.amr"
+#endif
+
+#define AMR_HANDLER_SIZE	32
+#define SERIALPORT_PACKET_SIZE		1024
+
+S32 u32SerialPortSendIndex	= 0;
+S32 u32BlueToothPenetrateSize = 0;
+
+S8 filename[VS_MM_BUFFER_SIZE];
+S8 recorder_data[MAX_RECORDER_SIZE] = {0};
+S32 u16BlueToothDataIndex = 0;
+
+U16 apollo_flag = 0;
+U16 resend_times = 0;
+U16 save_flag = 0;
+
+U8 blockDataFlag = 0x0;
+
+void get_recorder_file(void) {
+	s8 path_ascii[64];
+	memset(filename, 0, VS_MM_BUFFER_SIZE);
+
+	//mmi_wcscat((U16*) filename, (U16*) L"avk_mm_audio\\");
+	memset(path_ascii,0x00,64);
+	sprintf((char*)path_ascii,"%c:\\%s",(S8)SRV_FMGR_PUBLIC_DRV,YX_FILE_FOLD_NAME);
+	mmi_asc_to_ucs2((CHAR*)filename,(CHAR*)path_ascii);
+	mmi_ucs2cat((CHAR*)filename,(CHAR*)APOLLO_VOICE_FILENAME);
+
+}
+
+void Apollo_audio_misc_record_callback(mdi_result result, void *user_data)
+{
+    /*----------------------------------------------------------------*/
+    /* Local Variables                                                */
+    /*----------------------------------------------------------------*/
+
+    /*----------------------------------------------------------------*/
+    /* Code Body                                                      */
+    /*----------------------------------------------------------------*/
+    if (!(result == MDI_AUDIO_SUCCESS || result == MDI_AUDIO_TERMINATED))
+    {
+        kal_prompt_trace(MOD_YXAPP, "vs_mm_audio_misc_record_callback, error code :%d;\n", result);
+    }
+
+}
+
+void Apollo_audio_recorder_start(void) {
+	mdi_result result ;
+	FS_HANDLE fh = -1;
+	
+	get_recorder_file();
+	fh = FS_Open((const U16*)filename,FS_CREATE_ALWAYS);
+	FS_Close(fh);
+	
+	result = mdi_audio_start_record_with_limit(
+            (void*) filename,
+            MDI_FORMAT_AMR,
+            0,      /* 0: Low, >0: High */
+            Apollo_audio_misc_record_callback,
+            NULL,
+            MAX_RECORDER_SIZE,  /* Max record size in byte. 0: unlimited */
+            30);    /* Max record time in sec.  0: unlimited */
+	
+	if (result != MDI_AUDIO_SUCCESS) {
+		kal_prompt_trace(MOD_YXAPP,"{wbj_debug} audio failed\n");
+	    return;
+	} else {
+		kal_prompt_trace(MOD_YXAPP,"{wbj_debug} audio success\n");
+		//mdi_audio_play_file((void*) filename, DEVICE_AUDIO_PLAY_ONCE, NULL, NULL, NULL);
+	}
+}
+
+void Apollo_audio_recorder_stop(void) {
+	mdi_result result = mdi_audio_stop_record();
+
+	//kal_printf( "{wbj_debug} result\n");
+	kal_prompt_trace(MOD_YXAPP,"{wbj_debug} result\n");
+	if (result == MDI_AUDIO_SUCCESS) { //recv data
+		mdi_audio_play_file((void*) filename, DEVICE_AUDIO_PLAY_ONCE, NULL, NULL, NULL);
+	}
+}
+
+#ifndef APOLLO_VOICE_FILENAME
+#define APOLLO_VOICE_FILENAME		L"\\voice.amr"
+#endif
+
+void Apollo_audio_recv_data(void) {
+	S8     path_ascii[64];
+	S8     path[64 * 2];
+	U32 	  fileLen = -1;
+	FS_HANDLE fh = -1;
+
+	
+	memset(path_ascii,0x00,64);
+	sprintf((char*)path_ascii,"%c:\\%s",(S8)SRV_FMGR_PUBLIC_DRV,YX_FILE_FOLD_NAME);
+	mmi_asc_to_ucs2((CHAR*)path,(CHAR*)path_ascii);
+	mmi_ucs2cat((CHAR*)path,(CHAR*)APOLLO_VOICE_FILENAME);
+
+	fh = FS_Open((const U16*)path,FS_READ_ONLY);
+	FS_GetFileSize(fh,&fileLen);
+	FS_Close(fh);
+	
+	kal_prompt_trace(MOD_YXAPP,"Apollo_audio_recv_data path: %s, fileLen:%d\n", path, fileLen);
+	mdi_audio_play_file((void*) path, DEVICE_AUDIO_PLAY_ONCE, NULL, NULL, NULL);
+	ApolloAppSetRunFlag(YX_RUNKIND_OWNER_HEART);
+}
+
+extern int MD5_checksum(unsigned char *input, unsigned char *output, S32 length);
+extern int apollo_init_aes_ctx(void) ;
+extern void apollo_encrypt(unsigned char input[], unsigned char output[]) ;
+extern void apollo_decrypt(unsigned char input[], unsigned char output[]);
+extern void Apollo_set_burnkey(U8 *sendBuf, U8 *key);
+
+
+U8 apollo_key_buf[12] = {0};
+U8 recv_apollo_key[20] = {0};
+U8 apollo_key_ready = 0; //0 download key, 1 key ready
+U8 sos_key = 0; //press sos key
+U8 diedao_key = 0; 
+U32 step_num = 0;
+U32 sleep_quality = 0;
+
+extern U8 phonenumber[20];
+extern U32 getSecondOff(void);
+
+S32 ApolloBlueToothRecv(U8 *sendBuf) {
+	U8 header[AMR_HANDLER_SIZE] = {'%'};
+	U32 timeDiff = getSecondOff();
+	S32  bytes_read = u16BlueToothDataIndex, i = 0, j = 0, k = 0;
+	PU8 pu8;
+
+	if (u16BlueToothDataIndex <= 2*(1024-AMR_HANDLER_SIZE) ) {
+		pu8 = yxAppSockData.sendBuf;
+	} else {
+		pu8 = YxProtocolGetBigBuffer();
+	}
+
+	u16BlueToothDataIndex = 0;
+	header[0] = 'V';
+	Apollo_set_burnkey(header, apollo_key_buf);
+	Apollo_U32_datacpy(header+14, timeDiff);
+	kal_prompt_trace(MOD_YXAPP,"ApolloBlueToothRecv:%d\n", bytes_read);
+
+	for (i = 0;i < bytes_read/(1024 - AMR_HANDLER_SIZE);i ++)  {
+		header[13] = i;
+		header[29] = bytes_read/(1024 - AMR_HANDLER_SIZE)+1;
+		header[30] = (1024 - AMR_HANDLER_SIZE) / 256;
+		header[31] = (1024 - AMR_HANDLER_SIZE) % 256;
+		//apollo_encrypt(header, header);
+		//apollo_encrypt(header+16, header+16);
+		
+		for (j = 0;j < AMR_HANDLER_SIZE;j ++) {
+			pu8[k ++] = header[j];
+		}
+		for (j = 0;j < (1024 - AMR_HANDLER_SIZE);j ++) {
+			pu8[k ++] = recorder_data[i * (1024 - AMR_HANDLER_SIZE) +j];
+		}
+		
+		kal_prompt_trace(MOD_YXAPP,"ApolloBlueToothRecv:%c,%d, %d,%d %d",header[0], header[13], header[29], header[30], header[31]);
+	}
+
+	header[13] = i;
+	header[29] = bytes_read/(1024 - AMR_HANDLER_SIZE)+1;
+	header[30] = (bytes_read%(1024 - AMR_HANDLER_SIZE)) / 256;
+	header[31] = (bytes_read%(1024 - AMR_HANDLER_SIZE)) % 256;
+	//apollo_encrypt(header, header);
+	//apollo_encrypt(header+16, header+16);
+	
+	for (j = 0;j < AMR_HANDLER_SIZE;j ++) {
+		pu8[k ++] = header[j];
+	}
+	for (j = 0;j < (bytes_read%(1024 - AMR_HANDLER_SIZE));j ++) {
+		pu8[k ++] = recorder_data[i * (1024 - AMR_HANDLER_SIZE) +j];
+	}
+
+	kal_prompt_trace(MOD_YXAPP,"Apollo_read_recorder_file:%c,%d, %d,%d %d",header[0], header[13], header[29], header[30], header[31]);
+
+	return k;
+}
+
+
+
+void ApolloSerialPortSend(void) {
+	StopTimer(APOLLO_SERIALPORT_SEND_TIMER);
+
+	kal_prompt_trace(MOD_YXAPP,"ApolloSerialPortSend Index:%d, Size:%d \n", u32SerialPortSendIndex, u32BlueToothPenetrateSize);
+	if (u32SerialPortSendIndex <= (u32BlueToothPenetrateSize - SERIALPORT_PACKET_SIZE)) {
+		Uart1_sends(recorder_data+u32SerialPortSendIndex,SERIALPORT_PACKET_SIZE);
+		StartTimer(APOLLO_SERIALPORT_SEND_TIMER, YX_HEART_TICK_UNIT/5, ApolloSerialPortSend);
+		u32SerialPortSendIndex += SERIALPORT_PACKET_SIZE;
+	} else { //complete
+		Uart1_sends(recorder_data+u32SerialPortSendIndex,u32BlueToothPenetrateSize-u32SerialPortSendIndex);
+		u32SerialPortSendIndex = 0;
+		blockDataFlag = 0x02;
+	}
+}
+
+void ApolloBlueToothSendReady(void) {
+	U8 header[AMR_HANDLER_SIZE] = {'%'};
+	S32  bytes_read = 0, i, j, k = 0;
+	PU8 pu8 = YxProtocolGetBigBuffer();
+	FS_HANDLE fh = 0;
+
+	header[0] = 'V';
+	Apollo_set_burnkey(header, apollo_key_buf);
+	kal_prompt_trace(MOD_YXAPP,"ApolloBlueToothSendReady\n");
+	get_recorder_file();
+	
+	fh = FS_Open((const U16*)filename,FS_READ_ONLY);
+	if(fh >= FS_NO_ERROR)
+	{
+		U32   new_file_len = 0;
+		FS_GetFileSize(fh,&new_file_len);
+		if(new_file_len <= MAX_RECORDER_SIZE){
+			FS_Read(fh,(void*)recorder_data,new_file_len,&bytes_read);
+		} else {			
+			new_file_len = MAX_RECORDER_SIZE;
+			FS_Read(fh,(void*)recorder_data,new_file_len,&bytes_read);
+		}
+		u32BlueToothPenetrateSize = new_file_len;
+		FS_Close(fh);
+	}
+
+	//md5_update(&md5,recorder_data,bytes_read);
+	//md5_final(&md5, header+14);
+	kal_prompt_trace(MOD_YXAPP,"Apollo_read_recorder_file bytes_read:%d \n", bytes_read);
+	//apollo_init_aes_ctx();
+	
+	StartTimer(APOLLO_SERIALPORT_SEND_TIMER, YX_HEART_TICK_UNIT/5, ApolloSerialPortSend);
+#if 0
+	for (i = 0;i < bytes_read/(1024 - AMR_HANDLER_SIZE);i ++)  {
+		header[13] = i;
+		header[29] = bytes_read/(1024 - AMR_HANDLER_SIZE)+1;
+		header[30] = (1024 - AMR_HANDLER_SIZE) / 256;
+		header[31] = (1024 - AMR_HANDLER_SIZE) % 256;
+		//apollo_encrypt(header, header);
+		//apollo_encrypt(header+16, header+16);
+		
+		for (j = 0;j < AMR_HANDLER_SIZE;j ++) {
+			pu8[k ++] = header[j];
+		}
+		for (j = 0;j < (1024 - AMR_HANDLER_SIZE);j ++) {
+			pu8[k ++] = recorder_data[i * (1024 - AMR_HANDLER_SIZE) +j];
+		}
+	}
+
+	header[13] = i;
+	header[29] = bytes_read/(1024 - AMR_HANDLER_SIZE)+1;
+	header[30] = (bytes_read%(1024 - AMR_HANDLER_SIZE)) / 256;
+	header[31] = (bytes_read%(1024 - AMR_HANDLER_SIZE)) % 256;
+	//apollo_encrypt(header, header);
+	//apollo_encrypt(header+16, header+16);
+	
+	for (j = 0;j < AMR_HANDLER_SIZE;j ++) {
+		pu8[k ++] = header[j];
+	}
+	for (j = 0;j < (bytes_read%(1024 - AMR_HANDLER_SIZE));j ++) {
+		pu8[k ++] = recorder_data[i * (1024 - AMR_HANDLER_SIZE) +j];
+	}
+
+#endif
+	kal_prompt_trace(MOD_YXAPP,"send data k:%d \n", k);
+}
+
+
+S32 Apollo_read_recorder_file (U8 *sendBuf) {
+	
+	U8 header[AMR_HANDLER_SIZE] = {'%'};
+	S32  bytes_read = 0, i, j, k = 0;
+	PU8 pu8 = YxProtocolGetBigBuffer();
+	FS_HANDLE fh = 0;
+
+	header[0] = 'V';
+	Apollo_set_burnkey(header, apollo_key_buf);
+	kal_prompt_trace(MOD_YXAPP,"Apollo_read_recorder_file\n");
+	get_recorder_file();
+	
+	fh = FS_Open((const U16*)filename,FS_READ_ONLY);
+	if(fh >= FS_NO_ERROR)
+	{
+		U32   new_file_len = 0;
+		FS_GetFileSize(fh,&new_file_len);
+		if(new_file_len <= MAX_RECORDER_SIZE-AMR_HANDLER_SIZE){
+			FS_Read(fh,(void*)recorder_data,new_file_len,&bytes_read);
+		} else {			
+			new_file_len = 25*1024;
+			FS_Read(fh,(void*)recorder_data,new_file_len,&bytes_read);
+		}
+		FS_Close(fh);
+	}
+
+	//md5_update(&md5,recorder_data,bytes_read);
+	//md5_final(&md5, header+14);
+	kal_prompt_trace(MOD_YXAPP,"Apollo_read_recorder_file bytes_read:%d \n", bytes_read);
+	//apollo_init_aes_ctx();
+	
+	for (i = 0;i < bytes_read/(1024 - AMR_HANDLER_SIZE);i ++)  {
+		header[13] = i;
+		header[29] = bytes_read/(1024 - AMR_HANDLER_SIZE)+1;
+		header[30] = (1024 - AMR_HANDLER_SIZE) / 256;
+		header[31] = (1024 - AMR_HANDLER_SIZE) % 256;
+		//apollo_encrypt(header, header);
+		//apollo_encrypt(header+16, header+16);
+		
+		for (j = 0;j < AMR_HANDLER_SIZE;j ++) {
+			pu8[k ++] = header[j];
+		}
+		for (j = 0;j < (1024 - AMR_HANDLER_SIZE);j ++) {
+			pu8[k ++] = recorder_data[i * (1024 - AMR_HANDLER_SIZE) +j];
+		}
+	}
+
+	header[13] = i;
+	header[29] = bytes_read/(1024 - AMR_HANDLER_SIZE)+1;
+	header[30] = (bytes_read%(1024 - AMR_HANDLER_SIZE)) / 256;
+	header[31] = (bytes_read%(1024 - AMR_HANDLER_SIZE)) % 256;
+	//apollo_encrypt(header, header);
+	//apollo_encrypt(header+16, header+16);
+	
+	for (j = 0;j < AMR_HANDLER_SIZE;j ++) {
+		pu8[k ++] = header[j];
+	}
+	for (j = 0;j < (bytes_read%(1024 - AMR_HANDLER_SIZE));j ++) {
+		pu8[k ++] = recorder_data[i * (1024 - AMR_HANDLER_SIZE) +j];
+	}
+
+
+	kal_prompt_trace(MOD_YXAPP,"send data k:%d \n", k);
+	return k;
+}
+
+#endif
+
+
 
 /////////////////////////////////////////////////////////Uart api/////////////////////////////////////////////////////////////
 
@@ -1550,6 +1979,7 @@ kal_bool YxAppUartTaskInit(task_indx_type task_indx)
 	return KAL_TRUE;
 }
 
+#if 0
 void YxAppUartTaskMain(task_entry_struct * task_entry_ptr)
 {
 	ilm_struct current_ilm;
@@ -1591,6 +2021,7 @@ void YxAppUartTaskMain(task_entry_struct * task_entry_ptr)
 		free_ilm(&current_ilm);
 	}
 }
+#endif
 
 #if(YXAPP_UART_TASK_OWNER_WAY==1)
 static MMI_BOOL yx_uart_readyToRead_ind_hdler(void *msg)
@@ -1609,6 +2040,7 @@ void YxAppRegisterUartMsgToMMiTask(void)
 }
 #endif
 
+#if 0
 kal_bool YxAppUartTaskCreate(comptask_handler_struct **handle)
 {
 	static const comptask_handler_struct yxdc_handler_info =
@@ -1622,6 +2054,7 @@ kal_bool YxAppUartTaskCreate(comptask_handler_struct **handle)
 	*handle = (comptask_handler_struct *)&yxdc_handler_info;
 	return KAL_TRUE;
 }
+#endif
 
 #if(YX_IS_TEST_VERSION!=0)
 void YxAppTestUartSendData(U8 *dataBuf,U16 dataLen)
@@ -1638,12 +2071,26 @@ void YxAppTestUartSendData(U8 *dataBuf,U16 dataLen)
 #if(YX_SECOND_TICK_WAY==2)
 static void YxAppSecondTimerCallback(void)
 {
+	
 	StopTimer(JMMS_SEND_TIMEOUT_TIMER);
 //	YxAppTimerMsgToMMIMod();
 	YxAppHeartTickProc();
-	StartTimer(JMMS_SEND_TIMEOUT_TIMER,YX_HEART_TICK_UNIT,YxAppSecondTimerCallback);
+	StartTimer(JMMS_SEND_TIMEOUT_TIMER,YX_HEART_TICK_UNIT * 5 / 6,YxAppSecondTimerCallback);
 }
 #endif
+
+
+void led1_on(void);
+void led1_off(void);
+void led2_on(void);
+void led2_off(void);
+
+void ApolloMinuteTimerCallback(void) {
+	StopTimer(APOLLO_MINUTE_TIMER);
+	//Upload GPS
+	ApolloUploadGpsProc();
+	StartTimer(APOLLO_MINUTE_TIMER, YX_HEART_TICK_UNIT * 24, ApolloMinuteTimerCallback);
+}
 
 void YxAppStartSecondTimer(char start)
 {
@@ -1660,8 +2107,19 @@ void YxAppStartSecondTimer(char start)
 #endif
 }
 
+static int led_light = 0;
 void YxAppHeartTickProc(void)
 {
+#if 1 //Led reflash Update By WangBoJing
+	if (led_light++ == 0) {
+		led1_off();
+		led2_on();
+	} else {
+		led1_on();
+		led2_off();
+		led_light = 0;
+	}
+#endif
 	YxAppUploadHeartProc();
 	if((yxPlayToneTick>0)&&(YxAppGetSystemTick(1)-yxPlayToneTick>=3))//找手表的音乐播放时间为30秒,后关闭
 	{
@@ -1671,10 +2129,14 @@ void YxAppHeartTickProc(void)
 }
 /////////////////////////////////////////////////////////////////////GSENSOR APIS//////////////////////////////////////////////////////////////
 #if(YX_GSENSOR_SURPPORT==2)
-static void YxAppGsensorSampleCb(void *parameter)
+void YxAppGsensorSampleCb(void *parameter)
 {
+#if 0
+
 #ifndef WIN32
+	extern short PEDO_ProcessAccelarationData(short v_RawAccelX_s16r, short v_RawAccelY_s16r, short v_RawAccelZ_s16r);
 	extern kal_uint32 CTIRQ1_2_Mask_Status(void);
+	extern unsigned long PEDO_GetStepCount(void);
 	kal_uint32 CTIRQ_status = CTIRQ1_2_Mask_Status();
 	if(CTIRQ_status) //all interrupt masked except CTIRQ_1/2
     {
@@ -1684,32 +2146,26 @@ static void YxAppGsensorSampleCb(void *parameter)
 	else
 	{
 		kal_int16   x_adc = 0,y_adc = 0,z_adc = 0;
-#if(YX_IS_TEST_VERSION!=0)
-		char logBuf[51];
-#endif
-		if(YxAppGsensorSampleData(&x_adc,&y_adc,&z_adc)==1)
+		//if(YxAppGsensorSampleData(&x_adc,&y_adc,&z_adc)==1)
 		{
-#if(YX_IS_TEST_VERSION!=0)
-			sprintf(logBuf,"x_adc:%d,y_adc:%d,z_adc:%d\r\n",x_adc,y_adc,z_adc);
-			YxAppTestUartSendData((U8*)logBuf,strlen(logBuf));
+			PEDO_ProcessAccelarationData(x_adc, y_adc, z_adc);
+			yxGsensorParam.stepCount = yxSystemSet.todaySteps + PEDO_GetStepCount();
+#if(YX_IS_TEST_VERSION==2)
+			//kal_prompt_trace(MOD_BT, "x_adc:%d,y_adc:%d,z_adc:%d,step:%d\r\n",x_adc,y_adc,z_adc,yxGsensorParam.stepCount);
 #endif
 		}
 		kal_set_timer(yxGsensorParam.timerId,(kal_timer_func_ptr)YxAppGsensorSampleCb,NULL,yxGsensorParam.sample_period,0);
 		return;
 	}
 #endif
+
+#endif
 }
 
-void YxAppGsensorProcInit(void)
+static void YxAppGsensorSample(kal_bool enable)
 {
-	YxAppGsensorInition();
-	yxGsensorParam.timerId = kal_create_timer((kal_char*)"yxsensor timer");
-	yxGsensorParam.sample_period = 250;
-	YxAppGsensorSample(KAL_TRUE);
-}
+#if 0
 
-void YxAppGsensorSample(kal_bool enable)
-{
     if(enable)
     {
         kal_cancel_timer(yxGsensorParam.timerId);   
@@ -1717,13 +2173,170 @@ void YxAppGsensorSample(kal_bool enable)
     }  
     else
         kal_cancel_timer(yxGsensorParam.timerId);
+#endif
 }
-#elif (YX_GSENSOR_SURPPORT==1)
+
 void YxAppGsensorProcInit(void)
 {
+#if 0
+
+#ifndef WIN32
 	YxAppGsensorInition();
-	yxGsensorParam.isReady = 1;
+#endif
+	yxGsensorParam.timerId = kal_create_timer((kal_char*)"yxsensor timer");
+	yxGsensorParam.sample_period = 9;//15;//250;
+//	yxGsensorParam.stepCount = 0;
+//	yxGsensorParam.stepReset = 0;
+//	yxGsensorParam.sleepCount = 0;
+//	yxGsensorParam.stepDisplay = 0;
+//	yxGsensorParam.sleepStartStep = 0;
+#ifndef WIN32
+	//if(yxSystemSet.gsensor==1)
+		YxAppGsensorPedometerStart(1);
+	//else
+	//	YxAppGsensorPowerControl(0);
+#endif
+#endif
 }
+
+void YxAppGsensorPedometerStart(U8 start)
+{
+#if 0
+
+#ifndef WIN32
+	if(start)
+	{
+		extern void PEDO_InitAlgo(unsigned char v_GRange_u8r);
+		if(yxSystemSet.todaySteps>0)
+		{
+			MYTIME  oldtime;
+			U16     date = 0;
+			GetDateTime(&oldtime);
+			date = (oldtime.nMonth<<8)|oldtime.nDay;
+			if(date != yxSystemSet.dateSteps)
+				yxSystemSet.todaySteps = 0;
+		}
+		YxAppGsensorSample(KAL_FALSE);
+		//if(yxGsensorParam.stepCount == 0)
+			PEDO_InitAlgo(0);
+		if(yxSystemSet.todaySteps>0)
+			yxGsensorParam.stepCount = yxSystemSet.todaySteps;
+		YxAppGsensorPowerControl(1);
+		YxAppGsensorSample(KAL_TRUE);
+#if(YX_IS_TEST_VERSION==2)
+		kal_prompt_trace(MOD_BT, "pedometer start:%d,on:%d\r\n",yxGsensorParam.stepCount,yxSystemSet.gsensor);
+#endif
+	}
+	else
+	{
+		StopTimer(AVATAR_DELAY_DECODE_0);
+		YxAppGsensorSample(KAL_FALSE);
+		YxAppGsensorPowerControl(0);
+#if(YX_IS_TEST_VERSION==2)
+		kal_prompt_trace(MOD_BT, "pedometer off:%d,on:%d\r\n",yxGsensorParam.stepCount,yxSystemSet.gsensor);
+#endif
+	}
+#endif
+#endif
+
+}
+
+void YxAppGsensorCheckCurrentTime(U8 hour,U8 min)
+{
+#if 0
+	return ;
+//	if(yxSystemSet.gsensor==0)
+		return;
+//	if(hour==0 && min == 0 && yxGsensorParam.stepCount)//reset step
+	{
+//		if(yxGsensorParam.stepReset==0)
+		{
+////			if(yxGsensorParam.stepCount >= yxGsensorParam.sleepStartStep)
+////				yxGsensorParam.sleepCount = yxGsensorParam.stepCount - yxGsensorParam.sleepStartStep;
+////			yxGsensorParam.sleepStartStep = yxGsensorParam.sleepCount;
+//			yxGsensorParam.stepCount = 0;
+//			yxSystemSet.todaySteps = 0;
+			YxAppGsensorPedometerStart(1);
+//			yxGsensorParam.stepReset = 1;
+#if(YX_IS_TEST_VERSION==2)
+			kal_prompt_trace(MOD_BT, "pedometer 0 reset:%d,on:%d\r\n",yxGsensorParam.sleepStartStep);
+#endif
+			return;
+		}
+	}
+//	if(yxGsensorParam.stepReset==1 && min!=0)
+//		yxGsensorParam.stepReset = 0;
+	//sleep check time
+	if(hour >= 21 || hour < 7)
+	{
+//		if(hour==21 && min == 0 && yxGsensorParam.sleepStartStep == 0)
+//			yxGsensorParam.sleepStartStep = yxGsensorParam.stepCount;
+		if(hour >= 21)
+		{
+////			if(yxGsensorParam.stepCount >= yxGsensorParam.sleepStartStep)
+//				yxGsensorParam.sleepCount = yxGsensorParam.stepCount - yxGsensorParam.sleepStartStep;
+		}
+//		else
+//			yxGsensorParam.sleepCount = yxGsensorParam.sleepStartStep + yxGsensorParam.stepCount;
+#if(YX_IS_TEST_VERSION==2)
+		kal_prompt_trace(MOD_BT, "pedometer sleep:%d\r\n",yxGsensorParam.sleepCount);
+#endif
+	}
+	//else
+	//	yxGsensorParam.sleepCount = 0;
+#endif
+}
+
+U16 YxAppGsensorGetStep(char sleep)
+{
+//	if(sleep)
+//		return yxGsensorParam.sleepCount;
+//	return yxGsensorParam.stepCount;
+}
+
+#endif
+
+char YxAppGsensorStatus(void)
+{
+//	return (yxSystemSet.gsensor==1)?1:0;
+}
+
+#if(YX_GSENSOR_SURPPORT!=0)
+static void YxAppGsensorTimerCheckCb(void)
+{
+//	if(yxGsensorParam.stepDisplay != yxGsensorParam.stepCount)
+	{
+		//IdleShowPedometerSteps(1);
+//		yxGsensorParam.stepDisplay != yxGsensorParam.stepCount;
+	}
+	//StartTimer(AVATAR_DELAY_DECODE_0,1000,YxAppGsensorTimerCheckCb);
+}
+
+void YxAppGsensorIdleTimerCheck(char start)
+{
+#if 0
+	extern U16 on_idle_screen;
+	if(on_idle_screen==0)
+		return;
+	StopTimer(AVATAR_DELAY_DECODE_0);
+//	if((start==0)||(yxSystemSet.gsensor==0))
+		return;
+	StartTimer(AVATAR_DELAY_DECODE_0,1000,YxAppGsensorTimerCheckCb);
+#endif
+}
+
+void YxAppSaveTodaySteps(void)
+{
+//	if(yxGsensorParam.stepCount != yxSystemSet.todaySteps)
+	{
+//		MYTIME  oldtime;
+//		GetDateTime(&oldtime);
+//		yxSystemSet.dateSteps = (oldtime.nMonth<<8)|oldtime.nDay;
+//		yxSystemSet.todaySteps = yxGsensorParam.stepCount;
+//		YxAppSaveSystemSettings();
+	}
+}
+
 #endif
 /////////////////////////////////////////////////////////////////////WLAN APIS//////////////////////////////////////////////////////////////
 #ifdef __MMI_WLAN_FEATURES__
@@ -2197,6 +2810,8 @@ static void YxAppCellRegRsp(l4c_nbr_cell_info_ind_struct *msg_ptr)
 			yxCellParam.cellInfor[j].ci = cell_info.nbr_cell_info[i].gci.ci;
 			j++;
 		}
+
+		lbs_get_value();
 		return;
 	}
 }
@@ -2206,6 +2821,8 @@ static void YxAppCellTimerOut(void)
 #if(YX_IS_TEST_VERSION!=0)
 	char  buffer[80];
 #endif
+	StopTimer(APOLLO_LBS_TIMEOUT_TIMER);
+	kal_prompt_trace(MOD_YXAPP," ddddddddddddddd YxAppCellTimerOut\n");
 	YxAppCellDeregReq();
 #if(YX_IS_TEST_VERSION!=0)
 	sprintf(buffer,"LBS end: N:%d,rx:%d,mc:%d,nc:%d,ac:%d,ci:%d\r\n",yxCellParam.cellNum,-1*yxCellParam.cellInfor[0].rxlev,yxCellParam.cellInfor[0].mcc,
@@ -2219,6 +2836,7 @@ static void YxAppCellStartReq(void)
 	//if((yxCellParam.isRunning>0)||(YXISINCALL(SRV_UCM_CALL_STATE_ALL) > 0))
 	if(yxCellParam.isRunning>0)
 		return;
+	kal_prompt_trace(MOD_YXAPP," ccccccccccccc YxAppCellStartReq\n");
 	SetProtocolEventHandler(YxAppCellRegRsp,MSG_ID_L4C_NBR_CELL_INFO_REG_CNF);
 	SetProtocolEventHandler(YxAppCellRegRsp,MSG_ID_L4C_NBR_CELL_INFO_IND);
 	YxAppCellSendMsg(MSG_ID_L4C_NBR_CELL_INFO_REG_REQ);
@@ -2227,17 +2845,24 @@ static void YxAppCellStartReq(void)
 	YxAppTestUartSendData("LBS_START\r\n",11);
 #endif
 	//gui_start_timer(YXAPP_LBS_TIMER_OUT,YxAppCellTimerOut);
+	kal_prompt_trace(MOD_YXAPP," ddassdafsdsd YxAppCellStartReq\n");
+	#if 0
 	StopTimer(POC_IND_TIMER);
 	StartTimer(POC_IND_TIMER,YXAPP_LBS_TIMER_OUT,YxAppCellTimerOut);
+	#else
+	StartTimer(APOLLO_LBS_TIMEOUT_TIMER, YXAPP_LBS_TIMER_OUT, YxAppCellTimerOut);
+	#endif
 }
 
 static void YxAppCellEndTimer(void)
 {
-	YxAppStepRunMain(YX_RUNKIND_LBS);
+	//YxAppStepRunMain(YX_RUNKIND_LBS);
+	YxAppCellRegReq();
 }
 
 static void YxAppCellCancelReq(void)
 {
+	kal_prompt_trace(MOD_YXAPP," aaaaaaaaaaaa ApolloStartLab running:%d\n", yxCellParam.isRunning);
 	if(yxCellParam.isRunning)
 	{
 		ClearProtocolEventHandler(MSG_ID_L4C_NBR_CELL_INFO_IND);
@@ -2245,7 +2870,7 @@ static void YxAppCellCancelReq(void)
 		YxAppCellSendMsg(MSG_ID_L4C_NBR_CELL_INFO_DEREG_REQ);
 		yxCellParam.isRunning = 0;
 	}
-	StartTimer(POC_IND_TIMER,1000,YxAppCellEndTimer);
+	//StartTimer(POC_IND_TIMER,1000,YxAppCellEndTimer);
 	return;
 }
 
@@ -2365,14 +2990,20 @@ S8 YxAppMakeWithCallType(S8 callType,S8 *number)
 	else if(callType==YX_CALL_SEND1)
 	{
 		if(YX_CHECK_MONITOR_INFOR(yxCallParam.yxMonitors[0].number,yxCallParam.yxMonitors[0].names)==1)
+		{
+			mmi_phb_popup_display_ext(STR_ID_PHB_NO_ENTRY_TO_SELECT,MMI_EVENT_FAILURE);
 			return 0;
+		}
 		yxCallParam.callKind = callType;
 		return YxAppMakeCall(0,yxCallParam.yxMonitors[0].number);
 	}
 	else if(callType==YX_CALL_SEND2)
 	{
 		if(YX_CHECK_MONITOR_INFOR(yxCallParam.yxMonitors[1].number,yxCallParam.yxMonitors[1].names)==1)
+		{
+			mmi_phb_popup_display_ext(STR_ID_PHB_NO_ENTRY_TO_SELECT,MMI_EVENT_FAILURE);
 			return 0;
+		}
 		yxCallParam.callKind = callType;
 		return YxAppMakeCall(0,yxCallParam.yxMonitors[1].number);
 	}
@@ -2485,7 +3116,7 @@ static void yxapp_send_sms_callback(srv_sms_callback_struct* callback_data)
  	}
 }
 
-static void YxAppSendSmsIntenal(S8* number,char gsmCode,U16* content)//ucs2
+void YxAppSendSmsIntenal(S8* number,char gsmCode,U16* content)//ucs2
 {
     SMS_HANDLE send_handle;
 	U16        addrNum[SRV_SMS_MAX_ADDR_LEN+1],i = 0;
@@ -2508,7 +3139,7 @@ static void YxAppSendSmsIntenal(S8* number,char gsmCode,U16* content)//ucs2
     srv_sms_set_content_dcs(send_handle, (gsmCode==1)?SRV_SMS_DCS_7BIT:SRV_SMS_DCS_UCS2);
 	srv_sms_set_reply_path(send_handle, MMI_FALSE);
     /* set content */
-    srv_sms_set_content(send_handle, (S8*)content, (U16)((mmi_wcslen(content)+1)*2));
+    srv_sms_set_content(send_handle, (S8*)content, (U16)((YxAppUCSStrlen(content)+1)*2));
     /* set SIM1 */
     srv_sms_set_sim_id(send_handle, SRV_SMS_SIM_1);
 	srv_sms_set_no_sending_icon(send_handle);
@@ -2531,6 +3162,18 @@ void YxAppSetSmsNumber(S8 *number,U8 length)
 		strcpy(yxSmsParam.storeNumber,number);
 }
 
+S32 YxAppUCSStrlen(U16 *string)
+{
+	S32  i = 0;
+	if(string==NULL)
+		return 0;
+	while(string[i]!=0)
+	{
+		i++;
+	}
+	return i;
+}
+
 void YxAppSendSms(S8* number, U16* content,char gsmCode)
 {
 	char   useOld = 0;
@@ -2540,7 +3183,7 @@ void YxAppSendSms(S8* number, U16* content,char gsmCode)
 		number = (S8*)yxSmsParam.storeNumber;
 		strcpy(yxSmsParam.number,number);
 	}
-	if((number==NULL)||(content==NULL)||(strlen(number)>SRV_SMS_MAX_ADDR_LEN)||(strlen(number)==0)||(mmi_wcslen(content)==0))
+	if((number==NULL)||(content==NULL)||(strlen(number)>SRV_SMS_MAX_ADDR_LEN)||(strlen(number)==0)||(YxAppUCSStrlen(content)==0))
 		return;
 	if(useOld==0)
 	{
@@ -2549,7 +3192,7 @@ void YxAppSendSms(S8* number, U16* content,char gsmCode)
 	}
 	else
 		memset((void*)yxSmsParam.content,0,(YX_APP_MAX_SMS_CHARS+1)<<1);
-	mmi_wcscpy(yxSmsParam.content,content);
+	mmi_ucs2cpy((CHAR*)yxSmsParam.content,(CHAR*)content);
 	YxAppSendMsgToMMIMod(YX_MSG_SMS_CTRL,YX_DATA_SEND_SMS,gsmCode);
 }
 
@@ -2781,11 +3424,16 @@ S32 YxappAddOneApn(char simId,const U8 *apnName,const U8 *accountName,char *user
 	return -1;
 }
 
-static U8 YxAppSockNotifyCb(void* inMsg)
+U8 YxAppSockNotifyCb(void* inMsg)
 {
+	S32 total = 0;
     app_soc_notify_ind_struct *ind = NULL;
-    if(inMsg==NULL)                   
-        return MMI_FALSE;
+
+	//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppSockNotifyCb connect sucess\n");
+    	if(inMsg==NULL)    {      
+		kal_prompt_trace(MOD_YXAPP,"%d return false \n", __LINE__);
+        	return MMI_FALSE;
+    	}
 	ind = (app_soc_notify_ind_struct*)inMsg;
 	if((ind->socket_id != yxNetContext_ptr.sock)||(yxNetContext_ptr.sock<0))
 		return MMI_FALSE;
@@ -2794,15 +3442,19 @@ static U8 YxAppSockNotifyCb(void* inMsg)
 	case SOC_CONNECT:
 		if(ind->result == KAL_TRUE)
         {
+        		//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppSockNotifyCb connect sucess\n");
 			yxNetContext_ptr.socket_state = YX_NET_STATUS_CONN_CONNECTED;
 			yxAppSockData.curSendLen = 0;
 			yxAppSockData.sendLen = YxAppSockConnectedCallback(yxAppSockData.sendBuf,YX_SOCK_BUFFER_LEN);
+			kal_prompt_trace(MOD_YXAPP,"send msg len %d\n", yxAppSockData.sendLen);
 			if(yxAppSockData.sendLen>0)
 			{
-				if(yxAppSockData.sendLen <= YX_SOCK_BUFFER_LEN)
+				if(yxAppSockData.sendLen <= YX_SOCK_BUFFER_LEN)  {
 					YxAppTcpSockWrite(yxAppSockData.sendBuf, yxAppSockData.sendLen);
-				else if(yxAppSockData.sendLen <= YX_BIG_MEMERY_LEN)
+				}
+				else if(yxAppSockData.sendLen <= YX_BIG_MEMERY_LEN) {
 					YxAppTcpSockWrite(YxProtocolGetBigBuffer(), yxAppSockData.sendLen);
+				}	
 			}
 #if(YX_IS_TEST_VERSION!=0)
 			YxAppTestUartSendData("ldz-21\r\n",7);
@@ -2819,62 +3471,154 @@ static U8 YxAppSockNotifyCb(void* inMsg)
 	case SOC_READ:
 __CONTINUE_READ:
 		{
-			S32   readLen = YxAppTcpSockRead(yxAppSockData.readBuffer,YX_SOCK_READ_BUFFER_LEN);
-			if(readLen>0)
-			{
-				yxAppSockData.sendLen = YxAppSockReadDataCallback(yxAppSockData.readBuffer,(U16)readLen,yxAppSockData.sendBuf);
-				if(yxAppSockData.sendLen>0)
+			U16  flag = YxAppGetRunFlag();
+
+			kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppSockNotifyCb SOC_READ flag:%x\n", flag);
+			if (flag & APOLLO_RUNKIND_VOICE_DOWNLOAD) {
+				Apollo_read_voice_packet(&yxAppSockData.readLen, &yxAppSockData.readIndex, yxAppSockData.readBuffer);
+				//ApolloAppSetRunFlag(apollo_flag);
+			} else {
+				S32   readLen = YxAppTcpSockRead(yxAppSockData.readBuffer,YX_SOCK_READ_BUFFER_LEN);
+				if(readLen>0)
 				{
-					yxAppSockData.curSendLen = 0;
-					YxAppTcpSockWrite(yxAppSockData.sendBuf, yxAppSockData.sendLen);
-				}
-				else
-				{
-					if(yxAppSockData.sendLen == -1)//continue read
+					kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppSockNotifyCb SOC_READ: %d\n", readLen);
+					yxAppSockData.sendLen = YxAppSockReadDataCallback(yxAppSockData.readBuffer,(U16)readLen,yxAppSockData.sendBuf);
+					if(yxAppSockData.sendLen>0 && yxAppSockData.readBuffer[0] == 0x43 && yxAppSockData.readBuffer[3] == 0x02)
 					{
-						YxAppRestartServerTimer();//big data need restart timer again
-						goto __CONTINUE_READ;
+						ApolloAppSetPacketTimes(0);
+						yxAppSockData.curSendLen = 0;
+						yxAppSockData.readLen = 0;
+						yxAppSockData.readIndex = 0;
+						//ApolloAppSetRunFlag(apollo_flag);
+					#if 0 //Update By WangBoJing 20151007
+						YxAppTcpSockWrite(yxAppSockData.sendBuf, yxAppSockData.sendLen);
+						YxAppRestartServerTimer();
+					#endif
+						{
+						void ApolloConnectToServer(void) ;
+						StartTimer(APOLLO_RESEND_MESSAGE_TIMER, 1000, ApolloConnectToServer);
+						}
 					}
 					else
-						YxAppCloseSocket(0);
+					{
+						if(yxAppSockData.sendLen == -1)//continue read
+						{
+							YxAppRestartServerTimer();//big data need restart timer again
+							goto __CONTINUE_READ;
+						}
+						else
+							YxAppCloseSocket(0);
+					}
 				}
 			}
 		}
 		break;
 	case SOC_WRITE: //MTK GPRS发数据时,一次最大为4K,超过4K,要等此消息后,才能发送数据
 #if(YX_IS_TEST_VERSION==2)
-		kal_prompt_trace(MOD_BT,"soc write:%d,%d\r\n",yxAppSockData.curSendLen,yxAppSockData.sendLen);
+		kal_prompt_trace(MOD_YXAPP,"soc write:%d,%d\r\n",yxAppSockData.curSendLen,yxAppSockData.sendLen);
 #endif
 		if((yxAppSockData.curSendLen>0) && (yxAppSockData.sendLen > YX_SOCK_BUFFER_LEN))
 		{
-			if(yxAppSockData.curSendLen >= yxAppSockData.sendLen)//send over
+			if(yxAppSockData.curSendLen >= yxAppSockData.sendLen) {//send over
 				yxAppSockData.curSendLen = 0;
-			else
-			{
+			} else {
+				#if 1
 				if(YxAppTcpSockWrite(YxProtocolGetBigBuffer(), yxAppSockData.sendLen)<0)
 					YxAppRestartServerTimer();//big data need restart timer again
+				#else
+				S32 total = YxAppTcpSockWrite(YxProtocolGetBigBuffer(), yxAppSockData.sendLen);
+				kal_prompt_trace(MOD_YXAPP,"re write total:%d,%d\r\n", total);
+				//StartTimer(APOLLO_RESEND_MESSAGE_TIMER,1000,Apollo_resend_message);
+				if (YxAppGetRunFlag() == APOLLO_RUNKIND_VOICE_UPLOAD) {
+					ApolloAppSetRunFlag(apollo_flag);	
+					//memset(YxProtocolGetBigBuffer(), 0, YX_BIG_MEMERY_LEN);
+					//StopTimer(APOLLO_RESEND_MESSAGE_TIMER);
+				}
+				#endif
 			}
 		}
 		break;
-	case SOC_CLOSE:
+	case SOC_CLOSE: {
+		U16  flag = YxAppGetRunFlag();
 		YxAppCloseSocket(0);
+
+		kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppSockNotifyCb SOC_CLOSE: %x\n", flag);
 #if(YX_IS_TEST_VERSION!=0)
 		YxAppTestUartSendData("ldz-10\r\n",8);
 #endif
+#if 1
+		if (flag & APOLLO_RUNKIND_VOICE_DOWNLOAD) {
+			//YxAppConnectToMyServer();
+			void ApolloConnectToServer(void) ;
+			StartTimer(APOLLO_RESEND_MESSAGE_TIMER, 500, ApolloConnectToServer);
+		}
+#endif
 		break;
+	}
 	default:
 		break;
 	}
     return MMI_TRUE;
 }
 
+void ApolloResetAllSocket(void) {
+	kal_int8 i = 0;
+	for (i = 0;i < 5;i ++) { //Reset All Socket
+		soc_close(i);
+		ClearProtocolEventHandler(MSG_ID_APP_SOC_NOTIFY_IND);
+		ClearProtocolEventHandler(MSG_ID_APP_SOC_GET_HOST_BY_NAME_IND);
+	}
+	yxNetContext_ptr.sock = -1;
+}
+
+U8 u8Time = 0;
+void ApolloConnectToServer(void ) {
+	S8 ret = -1;
+	if (u8Time ++ >= 2) return;
+
+	kal_prompt_trace(MOD_YXAPP," aaa connect to server, socket: %d, status:%d\n", yxNetContext_ptr.sock , yxNetContext_ptr.socket_state);
+	if (yxNetContext_ptr.sock == -1) {
+		ret = YxAppConnectToMyServer();
+		kal_prompt_trace(MOD_YXAPP,"{wbj_debug} ApolloConnectToServer ret: %d\n", ret);
+		if (ret != 1) {
+			StartTimer(APOLLO_RESEND_MESSAGE_TIMER, 500, ApolloConnectToServer);
+		} else {
+			u8Time = 0;
+		}
+	} else if (yxNetContext_ptr.sock >= 0){
+		YxAppCloseSocket(0);
+		StartTimer(APOLLO_RESEND_MESSAGE_TIMER, 500, ApolloConnectToServer);
+	} else if (yxNetContext_ptr.sock == -3) {
+		StartTimer(APOLLO_RESET_ALL_SOCKET, 500, ApolloResetAllSocket);
+	}
+}
+
 static S8 YxAppSocketConnect(S8 sock,sockaddr_struct *address)
 {
+	//kal_prompt_trace(MOD_YXAPP,"YxAppSocketConnect\n");
+	kal_prompt_trace(MOD_YXAPP,"sock:%d , YxAppSocketConnect addr:%d.%d.%d.%d\n", sock ,address->addr[0], address->addr[1], address->addr[2], address->addr[3]);
+#if 0 //Update By WangBoJing
+	if (address->addr[0] != 112) {
+		address->addr[0] = 112;
+		address->addr[1] = 74;
+		address->addr[2] = 129;
+		address->addr[3] = 24;
+		address->port = 8880;
+	}
+#endif
+	if (sock < 0) {
+		//YxAppCloseSocket(1);
+		//YxAppConnectToMyServer();
+		//sock = yxNetContext_ptr.sock;
+		ApolloConnectToServer();
+		return 2;
+	}
 	yxNetContext_ptr.socket_state = YX_NET_STATUS_CONN_CONNECTTING;
 	switch(soc_connect(sock,address))
 	{
 	case SOC_SUCCESS:
 	case SOC_WOULDBLOCK:
+		//kal_prompt_trace(MOD_YXAPP,"SetProtocolEventHandler addr:%d.%d.%d.%d\n", address->addr[0], address->addr[1], address->addr[2], address->addr[3]);
 		SetProtocolEventHandler(YxAppSockNotifyCb, MSG_ID_APP_SOC_NOTIFY_IND);
 		return 1;
 	default:
@@ -2976,6 +3720,8 @@ static S8 YxAppTcpStartConnect(const S8* host, U16 port, S8 apn)
 	if(yxNetContext_ptr.sock<0 || yxNetContext_ptr.socket_state==YX_NET_STATUS_CONN_CONNECTTING)
 		return 0;
 	memset(&addr,0,sizeof(sockaddr_struct));
+	kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppTcpStartConnect ret: %d\n", apn);
+		
 	addr.sock_type = SOC_SOCK_STREAM;
 	if(apn == MAPN_WAP)    // cmwap 连接
 	{
@@ -3004,7 +3750,7 @@ static S8 YxAppTcpStartConnect(const S8* host, U16 port, S8 apn)
 			addr.addr_len = 4;
 			addr.port = port;
 #if(YX_IS_TEST_VERSION==2)
-			kal_prompt_trace(MOD_BT,"direct:%d:%d:%d:%d:%d,ipvalid:%d,soc:%d\r\n",addr.addr[0],addr.addr[1],addr.addr[2],addr.addr[3],addr.port,is_ip_valid,yxNetContext_ptr.sock);
+			kal_prompt_trace(MOD_YXAPP,"direct:%d:%d:%d:%d:%d,ipvalid:%d,soc:%d\r\n",addr.addr[0],addr.addr[1],addr.addr[2],addr.addr[3],addr.port,is_ip_valid,yxNetContext_ptr.sock);
 #endif
 			return YxAppSocketConnect(yxNetContext_ptr.sock,&addr);
 		}
@@ -3044,14 +3790,17 @@ S8 YxAppTcpConnectToServer(const S8* host, U16 port, S8 apn)
 {
     U8     apn_check = (U8)YxAppGetSimOperator(YX_APP_SIM1);
 	U32    account_id = 0;
+	
     if(!host  || port == 0 || (apn_check==MSIM_OPR_UNKOWN) || (apn_check==MSIM_OPR_NONE))
         return 0;
     apn_check = (apn != MAPN_WAP && apn != MAPN_NET && apn != MAPN_WIFI);
 	if(apn_check)
 		return 0;
+			
 	yxNetContext_ptr.apn = apn;
    // yxNetContext_ptr.port = port;
 	account_id = YxAppDtcntMakeDataAcctId(YX_APP_SIM1,NULL,apn,&(yxNetContext_ptr.appid));
+	kal_prompt_trace(MOD_YXAPP, "YxAppTcpConnectToServer %d\n", account_id);
 	if(account_id==0)
 	{
 		yxNetContext_ptr.account_id = 0;
@@ -3063,25 +3812,30 @@ S8 YxAppTcpConnectToServer(const S8* host, U16 port, S8 apn)
     soc_init_win32();
 #endif
 	yxNetContext_ptr.sock = soc_create(SOC_PF_INET, SOC_SOCK_STREAM, 0, MOD_MMI, yxNetContext_ptr.account_id);
-    if(yxNetContext_ptr.sock >= 0)
+	kal_prompt_trace(MOD_YXAPP, "YxAppTcpConnectToServer socket %d\n", yxNetContext_ptr.sock);
+	if(yxNetContext_ptr.sock >= 0)
     {
         kal_uint8 val = KAL_TRUE;
-#if 0
-		kal_int32 bufLen = YX_SOCK_BUFFER_LEN;
+#if 1
+		kal_int32 bufLen = YX_SOCK_BUFFER_LEN*2;
 		if(soc_setsockopt(yxNetContext_ptr.sock, SOC_SENDBUF, &bufLen, sizeof(bufLen)) < 0)
 		{
+			kal_prompt_trace(MOD_YXAPP, "soc_setsockopt SOC_SENDBUF\n");
 			YxAppCloseSocket(0);
 			return 2;
 		}
-		bufLen = YX_SOCK_READ_BUFFER_LEN;
+		bufLen = YX_SOCK_READ_BUFFER_LEN*2;
 		if(soc_setsockopt(yxNetContext_ptr.sock, SOC_RCVBUF, &bufLen, sizeof(bufLen)) < 0)
 		{
+			kal_prompt_trace(MOD_YXAPP, "soc_setsockopt SOC_RCVBUF\n");
 			YxAppCloseSocket(0);
 			return 2;
 		}
 #endif
+		
         if(soc_setsockopt(yxNetContext_ptr.sock, SOC_NBIO, &val, sizeof(val)) < 0)
         {
+        		kal_prompt_trace(MOD_YXAPP, "soc_setsockopt SOC_NBIO\n");
 			YxAppCloseSocket(0);
 			return 2;
         }
@@ -3090,6 +3844,7 @@ S8 YxAppTcpConnectToServer(const S8* host, U16 port, S8 apn)
             val = SOC_READ | SOC_WRITE | SOC_CLOSE | SOC_CONNECT;
             if(soc_setsockopt(yxNetContext_ptr.sock, SOC_ASYNC, &val, sizeof(val)) < 0)
             {
+            		kal_prompt_trace(MOD_YXAPP, "soc_setsockopt SOC_ASYNC\n");
                 YxAppCloseSocket(0);
 				return 2;
             }
@@ -3111,11 +3866,17 @@ S32 YxAppTcpSockRead(U8 *buf,S32 len)
         return 0;
     if(yxNetContext_ptr.socket_state != YX_NET_STATUS_CONN_CONNECTED)
         return 0; 
+
+	kal_prompt_trace(MOD_YXAPP,"YxAppTcpSockRead\n");
     if((ret = soc_recv(yxNetContext_ptr.sock, buf, len, 0)) <= 0)
     {
-        if(ret == SOC_WOULDBLOCK)
+        if(ret == SOC_WOULDBLOCK) {
+#if 1
             return -2;
-        else if(ret == 0)
+#else
+		SetProtocolEventHandler(YxAppSockNotifyCb,MSG_ID_APP_SOC_NOTIFY_IND);
+#endif
+        } else if(ret == 0)
             return -1;
         else
             return -3;
@@ -3125,28 +3886,48 @@ S32 YxAppTcpSockRead(U8 *buf,S32 len)
 
 S32 YxAppTcpSockWrite(U8 *buf, S32 len)
 {
-    S32 ret = 0,sendLen = YX_SOCK_BUFFER_LEN;
-	if(!buf || len == 0)
+    S32 ret = 0,sendLen = YX_SOCK_BUFFER_LEN, total = 0;
+	if(!buf || len < 8)
         return 0;
     if(yxNetContext_ptr.socket_state != YX_NET_STATUS_CONN_CONNECTED)
         return 0;
+	#if 1
+	//yxAppSockData.curSendLen = 0;
 	len -= yxAppSockData.curSendLen;
 	buf += yxAppSockData.curSendLen;
 	while(len>0)
 	{
 		if(len < YX_SOCK_BUFFER_LEN)
 			sendLen = len;
+		kal_prompt_trace(MOD_YXAPP, "soc_send %d\n", len);
 		if((ret = soc_send(yxNetContext_ptr.sock, buf, sendLen, 0)) < 0)
 		{
-			if(ret == SOC_WOULDBLOCK)
+			if(ret == SOC_WOULDBLOCK) {
+				//SetProtocolEventHandler(YxAppSockNotifyCb,MSG_ID_APP_SOC_NOTIFY_IND);
 				return -2;
-			else
+			} else
 				return -1;
+			
 		}
+		kal_prompt_trace(MOD_YXAPP,"YxAppTcpSockWrite th : %d id1:%x, id2:%x index:%d, size:%d \n", ret, buf[9], buf[10] ,buf[13], buf[30]*256 + buf[31]);
+		//printf("%d : %c %d total:%d %d %d\n", __LINE__,voice[0], voice[13], voice[29], voice[30], voice[31]);
 		yxAppSockData.curSendLen += ret;
+		total += ret;
 		buf += ret;
 		len -= ret;
     }
+	kal_prompt_trace(MOD_YXAPP,"YxAppTcpSockWrite total : %d, curindex:%d \n",total , yxAppSockData.curSendLen);
+	//ApolloAppSetRunFlag(YX_RUNKIND_OWNER_HEART);
+	//memset(YxProtocolGetBigBuffer(), 0, YX_BIG_MEMERY_LEN);
+	#else
+	if((ret = soc_send(yxNetContext_ptr.sock, buf, sendLen, 0)) < 0)  {
+		
+		if(ret == SOC_WOULDBLOCK)
+			return -2;
+		else
+			return -1;
+	}
+	#endif
     return ret;
 }
 
@@ -3276,11 +4057,17 @@ static void YxAppConnectToServerTimeOut(void)
 #endif
 	YxAppCloseSocket(1);
 }
+static void YxAppGetServerParams(const U16 *rootfolder);
+static U8 YxAppGetFolderPath(PU8 pathbuf);
 
 S8 YxAppConnectToMyServer(void)
 {
 	S8    res,*hostname = NULL;
-	U16   port = 0;
+	U16   port;
+	U8     path[64 * 2],isok=0;
+	memset((void*)path,0x00,64*2);
+	isok = YxAppGetFolderPath(path);
+	#if 0
 	if(yxNetContext_ptr.sock != -1)
 	{
 #if(YX_IS_TEST_VERSION!=0)
@@ -3288,9 +4075,15 @@ S8 YxAppConnectToMyServer(void)
 #endif
 		return 3;
 	}
+	#endif
 	StopTimer(POC_IND_TIMER);
 	memset((void*)&yxAppSockData,0,sizeof(YXAPPSOCKDATAPARAM));
+	
+	//printf("yxNetContext_ptr.hostName");
+	YxAppGetServerParams((const kal_wchar*)path);
+	kal_prompt_trace(MOD_YXAPP,"hostName: %s, port:%d\n", yxNetContext_ptr.hostName, yxNetContext_ptr.port);
 	port = YxAppGetHostNameAndPort(&hostname);
+
 #if(YX_NET_WAY==MAPN_NET)
 	res = YxAppTcpConnectToServer((const S8*)hostname, port, MAPN_NET);
 #else
@@ -3502,6 +4295,7 @@ char YxAppSystemDtIsDefault(void)
 }
 /////////////////////////////////////////////////////////////////////file apis//////////////////////////////////////////////////////////////
 
+#define  APOLLO_DEVICE_KEY		L"Z:\\apollo.dat"
 #define  YXAPP_SERVER_FILENAME  L"\\serverfile.dat" //保存服务器有关的参数,如域名,端口号,所选IP序号
 #define  YXAPP_MONITOR_FILENAME L"\\monitorfile.dat" //保存监护者名单列表
 #define  YXAPP_WHITENAME_FILENAME L"\\whitefile.dat" //白名单列表
@@ -3534,6 +4328,57 @@ static U8 YxAppGetFolderPath(PU8 pathbuf)
 			return 1;
 		}
 	}
+	return 0;
+}
+
+
+static UINT writeApolloKey(CHAR* fname, U8 *data, int size) {
+	FS_HANDLE fh = 0;
+	U8     filename[81];
+	UINT   wrsize = 0;
+	
+	memset((void*)filename, 0x00, 81);
+	mmi_ucs2cpy((CHAR*)filename, fname);
+	fh = FS_Open((const U16*)filename,FS_CREATE_ALWAYS|FS_READ_WRITE|FS_CACHE_DATA);
+	if(fh>=FS_NO_ERROR) {
+		kal_prompt_trace(MOD_YXAPP," ApolloKey: %s \n", (U8*)data);	
+		FS_Write(fh,(void*)data,size,(UINT*)&wrsize);
+
+		FS_Commit(fh);
+		FS_Close(fh);
+	}
+	return wrsize;
+}
+
+static U8 checkApolloKey(U8 *key, int length) {
+	U8 i;
+	int temp = 0;
+	
+	if (length != 16) {
+		return 2;
+	}
+
+	for (i = 0;i < 8;i ++) {
+		if (key[i] < 0x30 || key[i] > 0x39) {
+			return 3;
+		}
+	}
+
+	temp = (key[0]-0x30) * 1000 + (key[1]-0x30) * 100 + (key[2]-0x30) * 10 + (key[3]-0x30);
+	if (temp < 2015 || temp > 2020) {
+		return 4;
+	}
+
+	temp = (key[4] - 0x30) * 10 + (key[5] - 0x30);
+	if (temp > 12 || temp < 0) {
+		return 5;
+	}
+
+	temp = (key[6] - 0x30) * 10 + (key[7] - 0x30);
+	if (temp > 31 || temp < 0) {
+		return 6;
+	}
+	
 	return 0;
 }
 
@@ -3607,9 +4452,79 @@ static void YxAppGetServerParams(const U16 *rootfolder)
 	}
 	else
 	{
+	#if 0 //Update By WangBoJing
 		strcpy((char*)yxNetContext_ptr.hostName,(char*)YX_DOMAIN_NAME_DEFAULT);
 		yxNetContext_ptr.port = YX_SERVER_PORT;
 		return;
+	#else
+		kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppGetServerParams \n");	
+		if ( apollo_key_ready == 0) {
+			memset((void*)filename, 0x00, 81);
+			//mmi_ucs2cpy((CHAR*)filename, (CHAR*)rootfolder);
+			mmi_ucs2cpy((CHAR*)filename, (CHAR*)APOLLO_DEVICE_KEY);
+			fh = FS_Open((const U16*)filename,FS_READ_ONLY);
+			kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppGetServerParams :%d\n", fh);	
+			if(fh >= FS_NO_ERROR) { //read apollo key
+				U32   new_file_len = 0,bytes_read=0;
+				U8    *data_buff = NULL;
+				U8 result = 0;
+
+				FS_GetFileSize(fh,&new_file_len);
+				kal_prompt_trace(MOD_YXAPP,"{wbj_debug} new_file_len :%d\n", (U8*)new_file_len);	
+				if (new_file_len >= 16) {
+					data_buff = (U8*)OslMalloc(new_file_len);
+					FS_Read(fh,(void*)data_buff,new_file_len,&bytes_read);
+					kal_prompt_trace(MOD_YXAPP,"{wbj_debug} data_buff :%s\n", (U8*)data_buff);	
+					result = checkApolloKey(data_buff, 16);
+					if (result == 0) {  //set server ip to download key
+						kal_prompt_trace(MOD_YXAPP,"{wbj_debug} checkApolloKey :%d\n", result);	
+						FS_Close(fh);
+
+						#if 0
+						strcpy((char*)yxNetContext_ptr.hostName,(char*)YX_DOMAIN_NAME_DEFAULT);
+						yxNetContext_ptr.port = YX_SERVER_PORT;
+						#else
+						ApolloSetServerConf();
+						#endif
+						//return ;
+					}
+				}
+				FS_Close(fh);
+
+				//decode aes
+				if (data_buff) {
+					int i = 0;
+					for (i = 0;i < 8;i ++) {
+						apollo_key_buf[i] = (data_buff[2*i] - 0x30) << 4 | (data_buff[2*i+1] - 0x30);
+					}
+					OslMfree(data_buff);
+					apollo_key_ready = 1;
+				}
+
+				kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppGetServerParams :%d\n", result);	
+			} else { //set server ip to download key
+				apollo_key_ready = 0;
+				kal_prompt_trace(MOD_YXAPP,"set server ip to download key\n");
+				strcpy((char*)yxNetContext_ptr.hostName,(char*)APOLLO_BURNKEY_SERVER_IP);
+				yxNetContext_ptr.port = APOLLO_BURNKEY_SERVER_PORT;
+				return ;
+			}
+		}else {
+			apollo_key_ready = 1;
+			if (apollo_key_buf[0] == 0x0 && apollo_key_buf[1] == 0x0) {
+				apollo_key_ready = 0;
+			}
+			
+			kal_prompt_trace(MOD_YXAPP,"set server ip to download key 11111\n");
+			#if 0
+			strcpy((char*)yxNetContext_ptr.hostName,(char*)YX_DOMAIN_NAME_DEFAULT);
+			yxNetContext_ptr.port = YX_SERVER_PORT;
+			#else
+			ApolloSetServerConf();
+			#endif
+			return;
+		}
+	#endif
 	}
 }
 
@@ -4092,22 +5007,22 @@ char YxAppCheckTimeIsHiddenTime(void)
 			i++;
 			continue;
 		}
-		if((yxFirewall.startTime[i]>>8)<=(yxFirewall.endTime[i]>>8))
+		if((yxFirewall.startTime[i]/100)<=(yxFirewall.endTime[i]/100))
 		{
-			if(((oldtime.nHour>(yxFirewall.startTime[i]>>8) && oldtime.nHour < (yxFirewall.endTime[i]>>8))
-				||(oldtime.nHour==(yxFirewall.startTime[i]>>8) && oldtime.nMin >= (yxFirewall.startTime[i]&0x00FF)
-				&& ((oldtime.nHour<(yxFirewall.endTime[i]>>8))||(oldtime.nHour==(yxFirewall.endTime[i]>>8)
-				&&oldtime.nMin<=(yxFirewall.endTime[i]&0x00FF))))))
+			if(((oldtime.nHour>(yxFirewall.startTime[i]/100) && oldtime.nHour < (yxFirewall.endTime[i]/100))
+				||(oldtime.nHour==(yxFirewall.startTime[i]/100) && oldtime.nMin >= (yxFirewall.startTime[i]%100)
+				&& ((oldtime.nHour<(yxFirewall.endTime[i]/100))||(oldtime.nHour==(yxFirewall.endTime[i]/100)
+				&&oldtime.nMin<=(yxFirewall.endTime[i]%100))))))
 			{
 				return 1;
 			}
 		}
 		else
 		{
-			if((oldtime.nHour>(yxFirewall.startTime[i]>>8) && oldtime.nHour>(yxFirewall.endTime[i]>>8))
-				||(oldtime.nHour==(yxFirewall.startTime[i]>>8) && oldtime.nMin>=(yxFirewall.startTime[i]&0x00FF)
-				&&((oldtime.nHour>(yxFirewall.endTime[i]>>8))||(oldtime.nHour==(yxFirewall.endTime[i]>>8)
-				&&oldtime.nMin>=(yxFirewall.endTime[i]&0x00FF)))))
+			if((oldtime.nHour>(yxFirewall.startTime[i]/100) && oldtime.nHour>(yxFirewall.endTime[i]/100))
+				||(oldtime.nHour==(yxFirewall.startTime[i]/100) && oldtime.nMin>=(yxFirewall.startTime[i]%100)
+				&&((oldtime.nHour>(yxFirewall.endTime[i]/100))||(oldtime.nHour==(yxFirewall.endTime[i]/100)
+				&&oldtime.nMin>=(yxFirewall.endTime[i]%100)))))
 			{
 				return 1;
 			}
@@ -4203,9 +5118,9 @@ YXSYSTEMPARAM *YxAppGetSystemParam(S8 loadFile)
 #endif
 				if((yxSystemSet.lowBattery&0x7F)>=100)
 					yxSystemSet.lowBattery = 0;
-				if(yxSystemSet.gpsTimes<YX_GPS_UPLOAD_TIME)
+				if(yxSystemSet.gpsTimes<YX_GPS_TIME_MIN || yxSystemSet.gpsTimes>YX_GPS_TIME_MAX)
 					yxSystemSet.gpsTimes = YX_GPS_UPLOAD_TIME;
-				if(yxSystemSet.uploadTick<YX_MIN_UPLOAD_TIME)
+				if(yxSystemSet.uploadTick<YX_HEAT_TIME_MIN || yxSystemSet.uploadTick>YX_HEAT_TIME_MAX)
 					yxSystemSet.uploadTick = YX_MIN_UPLOAD_TIME;
 				yxSystemSet.allowOff = 0;
 				yxSystemSet.minuteTick = 0;
@@ -4343,7 +5258,7 @@ void YxAppSaveUnsendTxtcmdPackage(void)
 		{
 			U32   new_file_len = 0;
 			FS_GetFileSize(fh,&new_file_len);
-			if(new_file_len>=YX_UNSEND_PKG_FILE_LEN)
+			if(new_file_len+len>YX_UNSEND_PKG_FILE_LEN)
 			{
 				FS_Close(fh);
 				return;
@@ -4419,12 +5334,14 @@ S32 YxAppGetUnsendDataFromFile(U8 *buffer,S32 maxLen,S32 offset)
 			FS_Close(fh);
 			return 0;
 		}
+#if 0
 		FS_Read(fh,(void*)&bytes_read,4,NULL);
 		if(bytes_read>((U32)maxLen))//error
 		{
 			FS_Close(fh);
 			return 0;
 		}
+#endif
 		FS_Seek(fh,offset,FS_FILE_BEGIN);
 		FS_Read(fh,(void*)buffer,bytes_read,&bytes_read);
 		FS_Close(fh);
@@ -4716,14 +5633,18 @@ void YxAppSetAllowShutdown(void)
 
 char YxAppCheckAllowShutDown(void)
 {
+	lcd_dis_on();
+
 	if(srv_nw_usab_is_usable(MMI_SIM1))
 	{
 		if(yxSystemSet.allowOff==1)
 			return 1;
+		
 #if(YX_IS_TEST_VERSION!=0)
 		return 1;
 #else
-		return 0;
+
+		return 1;
 #endif
 	}
 	return 1;
@@ -4860,11 +5781,4244 @@ void YxAppInitionBasicApp(void)
 	}
 	memset((void*)yxEfencePkg,0,sizeof(YXEFENCEPARAM)*YX_EFENCE_MAX_NUM);
 	memset((void*)yxLogsPkg,0,sizeof(YXLOGPARAM)*YX_LOGS_MAX_NUM);
-	YxAppInitFileFolder();
-	YxAppGpsInition(yxSystemSet.gpsSetKind,1);//此处1请不要修改
+	YxAppInitFileFolder(); ////default filesystem
+	//YxAppGpsInition(yxSystemSet.gpsSetKind,1);//此处1请不要修改
 	YxAppInitionParam();
 #if(YX_GSENSOR_SURPPORT!=0)
 	memset((void*)&yxGsensorParam,0,sizeof(YXGSENSORPARAM));
 #endif
 }
 #endif
+
+
+//*****************************************************************
+
+//先初始化串口2 再初始化串口1
+
+//*****************************************************************
+
+//---------------------------usart---------------------------------
+
+UART_FUNCTION uart_function_flag = UART_FUNCTION_NONE;
+UART_STATUS uart_status_flag = UART_STATUS_OFF;
+
+static MMI_BOOL Uart1_Interrupt(void *msg);
+
+///// 我的串口1初始化函数 串口1挂载到MMI TASK上
+void Uart1_ini(void)
+{
+	module_type owner = SerialPort_UART_GetOwnerID(uart_port1);
+	if(owner != MOD_MMI)
+	{
+		SerialPort_UART_Close(uart_port1,owner);
+		SerialPort_UART_SetOwner(uart_port1,MOD_MMI);
+	}
+	{//串口参数配置
+		UARTDCBStruct    dcb;
+		module_type      owner = (module_type)MOD_MMI;
+		YXOS_UART_function(uart_port1,UART_CMD_BOOTUP_INIT,NULL);
+		SerialPort_UART_TurnOnPower(uart_port1,KAL_TRUE);
+		SerialPort_UART_Open(uart_port1,owner);
+
+		dcb.baud = UART_BAUD_9600;
+		dcb.dataBits = len_8;
+		dcb.stopBits = sb_1;
+		dcb.parity = pa_none;
+		dcb.flowControl = fc_none;//fc_none;
+		dcb.xonChar = 0x11;
+		dcb.xoffChar = 0x13;
+		dcb.DSRCheck = KAL_FALSE;
+		SerialPort_UART_SetDCBConfig(uart_port1,&dcb,owner);
+		SerialPort_UART_SetOwner(uart_port1,owner);
+	}
+
+	//注册串口的中断函数，串口1收到数据，触发相应函数。
+	mmi_frm_set_protocol_event_handler(MSG_ID_UART_READY_TO_READ_IND, (PsIntFuncPtr)Uart1_Interrupt, MMI_FALSE);
+	
+}
+
+//我的串口1发送多个字节函数
+void Uart1_sends(U8 *buff,U16 len)
+{
+	SerialPort_UART_PutBytes(uart_port1,buff,len,MOD_MMI);
+}
+typedef enum 
+{
+	LCD_UI_STATUS_MAIN_MENU0 =0,
+	LCD_UI_STATUS_MAIN_MENU1,
+	LCD_UI_STATUS_MAIN_MENU2,
+	LCD_UI_STATUS_VOICE_CHAT,
+	LCD_UI_STATUS_DAD,
+	LCD_UI_STATUS_MOM,
+	LCD_UI_STATUS_GRANDPA,
+	LCD_UI_STATUS_GRANDMA,
+	LCD_UI_STATUS_OTHER
+} LCD_UI_STATUS;
+
+LCD_UI_STATUS lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU0;
+
+//串口1的中断函数，收到数据后触发这个函数。
+static MMI_BOOL Uart1_Interrupt(void *msg)
+{
+	uart_ready_to_read_ind_struct* uart_rtr_ind = (uart_ready_to_read_ind_struct*)msg;
+	module_type      owner = SerialPort_UART_GetOwnerID(uart_rtr_ind->port);
+	if( owner!= MOD_MMI)
+        return MMI_FALSE;
+	
+	{//接收数据并处理
+	
+		U8    rbuffer[1024];///缓冲区
+		U16   rLen, i;
+		kal_uint8   status = 0;
+		unsigned char iii=0;
+		rLen = SerialPort_UART_GetBytes(uart_port1, rbuffer, 1024, &status, MOD_MMI);	
+		
+		SerialPort_UART_Purge(uart_port1, RX_BUF, MOD_MMI);
+    	SerialPort_UART_ClrRxBuffer(uart_port1, MOD_MMI);	
+
+		//数据已经收到了，下面是数据处理函数。
+		//lcd_flag_status = rbuffer[0];
+		//
+		//
+		//lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU2;
+		//for(iii=0;iii<rLen;iii++)
+
+		//Uart1_sends(rbuffer,rLen);
+		if(rbuffer[0] == 0x38 && rLen == 1)
+		{
+			
+			lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU2;
+			YxAppSendMsgToMMIMod(APOLLO_MSG_LED_ON,0,0);
+			//break;
+			return MMI_TRUE;
+		}
+#if 1 //Update By WangBoJing
+		if (save_flag & APOLLO_RUNKIND_VOICE_UPLOAD || YxAppGetRunFlag() & APOLLO_RUNKIND_VOICE_UPLOAD ){
+			//
+			U8 ret[6] = {'f', 'a', 'i', 'l', 'e', 'd'};
+			Uart1_sends(ret, 6);
+			return MMI_TRUE;
+		}
+		
+		for(i = 0;i < rLen;i ++) {
+			recorder_data[u16BlueToothDataIndex+i] = rbuffer[i];
+		}
+		u16BlueToothDataIndex += rLen;
+		if (rLen < 1024) {
+			YxAppSendMsgToMMIMod(APOLLO_MSG_BLUETOOTH_UPLOAD,0,0);
+			//u16BlueToothDataIndex = 0;
+		}
+#endif
+	}
+	return MMI_TRUE;
+}
+
+//// 我的串口2初始化函数  串口2挂载到YXAPP TASK上
+void Uart2_ini(unsigned long n)
+{
+	module_type owner = SerialPort_UART_GetOwnerID(uart_port2);
+	if(owner != MOD_YXAPP)
+	{
+		SerialPort_UART_Close(uart_port2,owner);
+		SerialPort_UART_SetOwner(uart_port2,MOD_YXAPP);
+	}
+	{//串口参数配置
+		UARTDCBStruct    dcb;
+		module_type      owner = (module_type)MOD_YXAPP;
+		YXOS_UART_function(uart_port2,UART_CMD_BOOTUP_INIT,NULL);
+		SerialPort_UART_TurnOnPower(uart_port2,KAL_TRUE);
+		SerialPort_UART_Open(uart_port2,owner);
+
+		dcb.baud = n;
+		dcb.dataBits = len_8;
+		dcb.stopBits = sb_1;
+		dcb.parity = pa_none;
+		dcb.flowControl = fc_none;//fc_none;
+		dcb.xonChar = 0x11;
+		dcb.xoffChar = 0x13;
+		dcb.DSRCheck = KAL_FALSE;
+		SerialPort_UART_SetDCBConfig(uart_port2,&dcb,owner);
+		SerialPort_UART_SetOwner(uart_port2,owner);
+	}
+
+
+	SerialPort_UART_Close(uart_port2,MOD_YXAPP);
+	SerialPort_UART_TurnOnPower(uart_port2,KAL_FALSE);
+	//初始化后 把串口关闭 用的时候 再打开。
+}
+
+void Uart2_open(unsigned long n)
+{
+	UARTDCBStruct	 dcb;
+	module_type 	 owner = (module_type)MOD_YXAPP;
+	//YXOS_UART_function(uart_port2,UART_CMD_BOOTUP_INIT,NULL);
+	SerialPort_UART_TurnOnPower(uart_port2,KAL_TRUE);
+	SerialPort_UART_Open(uart_port2,owner);
+	
+	dcb.baud = n;
+	dcb.dataBits = len_8;
+	dcb.stopBits = sb_1;
+	dcb.parity = pa_none;
+	dcb.flowControl = fc_none;//fc_none;
+	dcb.xonChar = 0x11;
+	dcb.xoffChar = 0x13;
+	dcb.DSRCheck = KAL_FALSE;
+	SerialPort_UART_SetDCBConfig(uart_port2,&dcb,MOD_YXAPP);
+	SerialPort_UART_SetOwner(uart_port2,MOD_YXAPP);
+
+}
+
+void Uart2_close(void)
+{
+	SerialPort_UART_Close(uart_port2,MOD_YXAPP);
+	SerialPort_UART_TurnOnPower(uart_port2,KAL_FALSE);
+}
+
+////我的串口2发送多个字节函数
+void Uart2_sends(U8 *buff,U16 len)
+{
+	SerialPort_UART_PutBytes(uart_port2,buff,len,MOD_YXAPP);
+}
+
+extern U8 GpsAllDataProc(U8 *rxbuffer,U16 len);
+extern YXGPSPARAMSTR  yxGpsParam;
+
+////我的串口2中断处理函数
+extern unsigned char JW_value[10];
+extern unsigned char flag_gps_status,flag_gps_status2;
+
+extern void gps_process(void);
+extern void GpsResetValues(void);
+extern U8 GpsAllDataProc(U8 *rxbuffer,U16 len);
+extern void WIFI_all_process(unsigned char *bufff,unsigned int changdu);
+extern void YxAppTurnOffScreen(void);
+
+void Uart2_Interrupt(task_entry_struct * task_entry_ptr)
+{
+	ilm_struct current_ilm;
+	kal_uint32 task_index=0;
+	kal_get_my_task_index(&task_index);
+
+	stack_set_active_module_id(task_index, MOD_YXAPP);
+
+	while(1)
+	{
+		receive_msg_ext_q_for_stack(task_info_g[task_index].task_ext_qid, &current_ilm);
+		stack_set_active_module_id(task_index, current_ilm.dest_mod_id);
+		switch(current_ilm.msg_id)
+		{
+			case MSG_ID_UART_READY_TO_READ_IND:
+			case MSG_ID_UART_READY_TO_WRITE_IND:
+
+			{
+				U8    rbuffer[1024];
+				U16   rLen;
+				kal_uint8	status = 0;
+				rLen = SerialPort_UART_GetBytes(uart_port2, rbuffer, 1024, &status, MOD_YXAPP);
+
+
+				SerialPort_UART_Purge(uart_port2, RX_BUF, MOD_YXAPP);
+				SerialPort_UART_ClrRxBuffer(uart_port2, MOD_YXAPP); 
+
+#if UART_LOG
+				Uart1_sends(rbuffer,rLen);
+#endif				
+		
+				if(uart_function_flag == UART_FUNCTION_GPS)//gps
+				{
+					GpsAllDataProc(rbuffer,rLen);
+#if UART_LOG					
+					{
+						unsigned char logBuf[40];
+						sprintf(logBuf,"latitude:%.6f\r\n",yxGpsParam.latitudev[0]);
+						Uart1_sends(logBuf,strlen(logBuf));
+					}
+					{
+						unsigned char logBuf[40];
+						sprintf(logBuf,"longitude:%.6f\r\n",yxGpsParam.longitudev[0]);
+						Uart1_sends(logBuf,strlen(logBuf));
+					}
+#endif						
+					if( gps_get_satellite_status_flag() ==GPS_SATELLITE_STATUS_EXIST)
+
+					{
+						gps_process();
+#if UART_LOG
+						{
+							unsigned char logBuf[40];
+							sprintf(logBuf,"%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x",JW_value[0],JW_value[1],\
+								JW_value[2],JW_value[3],JW_value[4]\
+								,JW_value[5],JW_value[6],JW_value[7],JW_value[8],JW_value[9]);
+							
+							Uart1_sends(logBuf,strlen(logBuf));
+						}
+#endif
+						//gps_data_ready();
+					}
+				}
+				else if(uart_function_flag == UART_FUNCTION_WIFI)//wifi
+				{
+
+				
+					WIFI_all_process(rbuffer,rLen);
+#if UART_LOG
+					if(WIFI_mac_all_num>0) 
+						WIFI_data_ready();
+					
+					{
+						unsigned char log_temp[40];
+						sprintf(log_temp,"mofan: %d (%2x%2x%2x%2x%2x%2x)	\n", WIFI_mac1[0],WIFI_mac1[1], WIFI_mac1[2], WIFI_mac1[3], WIFI_mac1[4], WIFI_mac1[5], WIFI_mac1[6] );
+						Uart1_sends(log_temp,strlen(log_temp));
+						
+						sprintf(log_temp,"mofan: %d (%2x%2x%2x%2x%2x%2x)	\n", WIFI_mac2[0],WIFI_mac2[1], WIFI_mac2[2], WIFI_mac2[3], WIFI_mac2[4], WIFI_mac2[5], WIFI_mac2[6] );
+						Uart1_sends(log_temp,strlen(log_temp));
+						
+						sprintf(log_temp,"mofan: %d (%2x%2x%2x%2x%2x%2x)	\n", WIFI_mac3[0],WIFI_mac3[1], WIFI_mac3[2], WIFI_mac3[3], WIFI_mac3[4], WIFI_mac3[5], WIFI_mac3[6] );
+						Uart1_sends(log_temp,strlen(log_temp));
+					
+					}
+#endif	
+				}
+
+			}
+			
+			break;
+
+			case MSG_ID_USB_TEST_START_IND :
+				
+				//if( flag_hand == 1 )
+				{
+					static unsigned char flag_die = 0 ;
+					//
+					//Uart1_sends("uart2_int\r\n",strlen("uart2_int\r\n"));
+					//YxAppSendMsgToMMIMod(88,0,0);
+
+					if(flag_die == 0)flag_die=1;
+					else
+					{
+					
+						lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU2;
+						YxAppSendMsgToMMIMod(APOLLO_MSG_LED_ON,0,0);
+					}
+				}
+				//else Uart1_sends("uart4_int4\r\n",strlen("uart2_int4\r\n"));
+				break;
+
+		}
+		free_ilm(&current_ilm);
+	}
+}
+
+//注册串口2的中断函数到YXAPP的入口
+kal_bool YxAppUartTaskCreate(comptask_handler_struct **handle)
+{
+	static const comptask_handler_struct yxdc_handler_info =
+	{
+		Uart2_Interrupt,			/* task entry function */
+		NULL,		  	/* task initialization function */
+		NULL, 				/* task configuration function */
+		NULL,			/* task reset handler */
+		NULL			/* task termination handler */
+	};
+	*handle = (comptask_handler_struct *)&yxdc_handler_info;
+	return KAL_TRUE;
+}
+
+//---------------------------usart---------------------------------
+
+//---------------------------display-------------------------------
+
+#include "mmi_rp_srv_status_icons_def.h"
+#include "mmi_rp_app_uiframework_def.h"
+#include "TimerEvents.h"
+#include "gdi_include.h"
+#if 0
+typedef enum 
+{
+	LCD_UI_STATUS_MAIN_MENU =0,
+	LCD_UI_STATUS_MAIN_MENU1,
+	LCD_UI_STATUS_MAIN_MENU2,
+	LCD_UI_STATUS_VOICE_CHAT,
+	LCD_UI_STATUS_DAD,
+	LCD_UI_STATUS_MOM,
+	LCD_UI_STATUS_GRANDPA,
+	LCD_UI_STATUS_GRANDMA,
+	LCD_UI_STATUS_OTHER
+} LCD_UI_STATUS;
+
+LCD_UI_STATUS lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU;
+#endif
+LCD_SWITCH_ONOFF_STATUS lcd_switch_onoff_status_flag = LCD_SWITCH_ONOFF_STATUS_ON;
+
+unsigned char dis_onoff_flag=1;
+
+unsigned char nian=15,yue=11,ri=13,shi=23,fen=45,miao=26,xingqi=2,xinhao=99,dianliang=98;
+
+void dis_nian(void)
+{
+	unsigned char temp =0;
+	gdi_image_draw_id(47, 0+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+	gdi_image_draw_id(47, 8+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+	temp=nian/10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(47, 16+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(47, 16+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(47, 16+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(47, 16+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(47, 16+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(47, 16+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(47, 16+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(47, 16+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(47, 16+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(47, 16+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+	temp=nian%10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(47, 24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(47, 24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(47, 24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(47, 24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(47, 24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(47, 24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(47, 24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(47, 24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(47, 24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(47, 24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+	
+}
+void dis_yue(void)
+{
+	unsigned char temp =0;
+	temp=yue/10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(47, 24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(47, 24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(47, 24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(47, 24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(47, 24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(47, 24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(47, 24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(47, 24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(47, 24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(47, 24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+	temp=yue%10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(47, 24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(47, 24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(47, 24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(47, 24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(47, 24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(47, 24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(47, 24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(47, 24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(47, 24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(47, 24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+}
+void dis_ri(void)
+{
+	unsigned char temp =0;
+	temp=ri/10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(47, 24+24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(47, 24+24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(47, 24+24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(47, 24+24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(47, 24+24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(47, 24+24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(47, 24+24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(47, 24+24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(47, 24+24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(47, 24+24+24+16, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+	temp=ri%10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(47, 24+24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(47, 24+24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(47, 24+24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(47, 24+24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(47, 24+24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(47, 24+24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(47, 24+24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(47, 24+24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(47, 24+24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(47, 24+24+24+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+}
+void dis_shi(void)
+{
+	unsigned char temp =0;
+	temp=shi/10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(47-16, 44, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(47-16, 44, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(47-16, 44, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(47-16, 44, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(47-16, 44, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(47-16, 44, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(47-16, 44, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(47-16, 44, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(47-16, 44, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(47-16, 44, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+	temp=shi%10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(47-16, 44+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(47-16, 44+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(47-16, 44+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(47-16, 44+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(47-16, 44+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(47-16, 44+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(47-16, 44+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(47-16, 44+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(47-16, 44+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(47-16, 44+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+}
+void dis_fen(void)
+{
+	unsigned char temp =0;
+	temp=fen/10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(47-16, 44+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(47-16, 44+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(47-16, 44+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(47-16, 44+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(47-16, 44+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(47-16, 44+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(47-16, 44+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(47-16, 44+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(47-16, 44+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(47-16, 44+24, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+	temp=fen%10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(47-16, 44+24+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(47-16, 44+24+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(47-16, 44+24+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(47-16, 44+24+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(47-16, 44+24+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(47-16, 44+24+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(47-16, 44+24+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(47-16, 44+24+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(47-16, 44+24+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(47-16, 44+24+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+}
+void dis_miao(void)
+{
+	unsigned char temp =0;
+	temp=miao/10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(0, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(0,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(0,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(0,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(0,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(0,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(0,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(0,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(0, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(0,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+	temp=miao%10;
+	switch(temp)
+	{
+	case 0:gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		break;
+	case 1:gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		break;
+	case 2:gdi_image_draw_id(15,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+		break;
+	case 3:gdi_image_draw_id(15,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		break;
+	case 4:gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		break;
+	case 5:gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		break;
+	case 6:gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		break;
+	case 7:gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(15,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+}
+void dis_xingqi(void)
+{
+
+	switch(xingqi)
+	{//
+	case 0:gdi_image_draw_id(45, 90, IMG_SI_EARPHONE_INDICATOR);//主界面
+		break;
+	case 1:gdi_image_draw_id(45, 90, IMG_SI_EARPHONE_INDICATOR);//主界面
+		break;
+	case 2:gdi_image_draw_id(45,  90, IMG_SI_GPRS_INDICATOR);//主界面
+		break;
+	case 3:gdi_image_draw_id(45,  90, IMG_SI_GPRS_INDICATOR);//主界面
+		break;
+	case 4:gdi_image_draw_id(45, 90, IMG_SI_GPRS_ATT_NO_PDP_INDICATOR);//主界面
+		break;
+	case 5:gdi_image_draw_id(45, 90, IMG_SI_GPRS_ATT_NO_PDP_INDICATOR);//主界面
+		break;
+	case 6:gdi_image_draw_id(45, 90, IMG_SI_LINE_L1);//主界面
+		break;
+	case 7:gdi_image_draw_id(45, 90, IMG_SI_LINE_L1);//主界面
+		break;
+	case 8:gdi_image_draw_id(45, 90, IMG_SI_KEYPAD_LOCK);//主界面
+		break;
+	case 9:gdi_image_draw_id(45,  90, IMG_SI_KEYPAD_LOCK);//主界面
+		break;
+	}
+}
+void get_time(void)
+{
+	applib_time_struct   dt;
+	applib_dt_get_date_time(&dt);
+	nian = (dt.nYear-2000);
+	yue= dt.nMonth;
+	ri= dt.nDay;
+	shi=dt.nHour;
+	fen=dt.nMin;
+	miao=dt.nSec;
+	xingqi=dt.DayIndex;
+}
+void dis_xinhao(void)
+{
+	unsigned char temp;
+	xinhao=YxAppGetSignalLevelInPercent();
+	temp = xinhao/10;
+	
+	
+	switch(temp)
+	{
+		case 0:gdi_image_draw_id(32, 127-16, IMG_SI_EARPHONE_INDICATOR);//主界面
+			break;
+		case 1:gdi_image_draw_id(32, 127-16, IMG_SI_EARPHONE_INDICATOR);//主界面
+			break;
+		case 2:gdi_image_draw_id(32,  127-16, IMG_SI_GPRS_INDICATOR);//主界面
+			break;
+		case 3:gdi_image_draw_id(32,  127-16, IMG_SI_GPRS_INDICATOR);//主界面
+			break;
+		case 4:gdi_image_draw_id(32, 127-16, IMG_SI_GPRS_ATT_NO_PDP_INDICATOR);//主界面
+			break;
+		case 5:gdi_image_draw_id(32, 127-16, IMG_SI_GPRS_ATT_NO_PDP_INDICATOR);//主界面
+			break;
+		case 6:gdi_image_draw_id(32, 127-16, IMG_SI_LINE_L1);//主界面
+			break;
+		case 7:gdi_image_draw_id(32, 127-16, IMG_SI_LINE_L1);//主界面
+			break;
+		case 8:gdi_image_draw_id(32, 127-16, IMG_SI_KEYPAD_LOCK);//主界面
+			break;
+		case 9:
+		case 10:
+				gdi_image_draw_id(32,  127-16, IMG_SI_KEYPAD_LOCK);//主界面
+			break;
+
+	}
+}
+void dis_bat(void)
+{
+	dianliang=srv_charbat_get_battery_level();
+	switch(dianliang)
+	{
+	case 0://gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+		//break;
+	case 1://gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+		//break;
+	case 2://gdi_image_draw_id(15,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+			gdi_image_draw_id(32, 0, IMG_SI_ALARM_ACTIVATED);
+		break;
+	case 3://gdi_image_draw_id(15,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+		gdi_image_draw_id(32, 0, IMG_SI_ALARM_ACTIVATED);
+		break;
+	case 4://gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+		gdi_image_draw_id(32, 0, IMG_SI_LINE_L2);
+		break;
+	case 5://gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+		gdi_image_draw_id(32, 0, IMG_SI_BT);
+		break;
+	case 6://gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+		gdi_image_draw_id(32, 0, IMG_SI_CIRCLE_INDICATOR);
+		break;
+	case 7:gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+		break;
+	case 8:gdi_image_draw_id(15, 90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+		break;
+	case 9:gdi_image_draw_id(15,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+		break;
+	}
+}
+void dis_bat_status(void)
+{
+	if ( srv_charbat_is_charging()  ) gdi_image_draw_id(30,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);
+	else gdi_image_draw_id(30,  90, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);
+}
+
+void dis_bat_low(void)
+{
+	gdi_image_draw_id(0, 0, IMG_SI_VIBRATE_THEN_RING);//主界面 先清屏
+	gdi_image_draw_id(30, 60, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+	gdi_image_draw_id(30, 0, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+}
+
+void dis_step(long n)
+{
+	unsigned char n1,n2,n3,n4,n5,n6,n7,n8;
+	unsigned char STEP_X=40;
+	n1=n/10000000%10;
+	n2=n/1000000%10;
+    n3=n/100000%10;
+	n4=n/10000%10;
+	n5=n%10000/1000;
+	n6=n%10000%1000/100;
+	n7=n%10000%1000%100/10;
+	n8=n%10000%1000%100%10;
+	
+	switch(n1)
+	{
+		case 0:gdi_image_draw_id(STEP_X, 12+32+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+			break;
+		case 1:gdi_image_draw_id(STEP_X, 12+32+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+			break;
+		case 2:gdi_image_draw_id(STEP_X, 12+32+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+			break;
+		case 3:gdi_image_draw_id(STEP_X, 12+32+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+			break;
+		case 4:gdi_image_draw_id(STEP_X, 12+32+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+			break;
+		case 5:gdi_image_draw_id(STEP_X, 12+32+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+			break;
+		case 6:gdi_image_draw_id(STEP_X, 12+32+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+			break;
+		case 7:gdi_image_draw_id(STEP_X, 12+32+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+			break;
+		case 8:gdi_image_draw_id(STEP_X, 12+32+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+			break;
+		case 9:gdi_image_draw_id(STEP_X, 12+32+8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+			break;
+	}
+	switch(n2)
+	{
+		case 0:gdi_image_draw_id(STEP_X, 12+32+8*2, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+			break;
+		case 1:gdi_image_draw_id(STEP_X, 12+32+8*2, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+			break;
+		case 2:gdi_image_draw_id(STEP_X, 12+32+8*2, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+			break;
+		case 3:gdi_image_draw_id(STEP_X, 12+32+8*2, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+			break;
+		case 4:gdi_image_draw_id(STEP_X, 12+32+8*2, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+			break;
+		case 5:gdi_image_draw_id(STEP_X, 12+32+8*2, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+			break;
+		case 6:gdi_image_draw_id(STEP_X, 12+32+8*2, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+			break;
+		case 7:gdi_image_draw_id(STEP_X, 12+32+8*2, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+			break;
+		case 8:gdi_image_draw_id(STEP_X, 12+32+8*2, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+			break;
+		case 9:gdi_image_draw_id(STEP_X, 12+32+8*2, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+			break;
+	}
+
+	switch(n3)
+	{
+		case 0:gdi_image_draw_id(STEP_X, 12+32+8*3, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+			break;
+		case 1:gdi_image_draw_id(STEP_X, 12+32+8*3, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+			break;
+		case 2:gdi_image_draw_id(STEP_X, 12+32+8*3, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+			break;
+		case 3:gdi_image_draw_id(STEP_X, 12+32+8*3, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+			break;
+		case 4:gdi_image_draw_id(STEP_X, 12+32+8*3, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+			break;
+		case 5:gdi_image_draw_id(STEP_X, 12+32+8*3, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+			break;
+		case 6:gdi_image_draw_id(STEP_X, 12+32+8*3, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+			break;
+		case 7:gdi_image_draw_id(STEP_X, 12+32+8*3, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+			break;
+		case 8:gdi_image_draw_id(STEP_X, 12+32+8*3, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+			break;
+		case 9:gdi_image_draw_id(STEP_X, 12+32+8*3, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+			break;
+	}
+
+	switch(n4)
+	{
+		case 0:gdi_image_draw_id(STEP_X, 12+32+8*4, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+			break;
+		case 1:gdi_image_draw_id(STEP_X, 12+32+8*4, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+			break;
+		case 2:gdi_image_draw_id(STEP_X, 12+32+8*4, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+			break;
+		case 3:gdi_image_draw_id(STEP_X, 12+32+8*4, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+			break;
+		case 4:gdi_image_draw_id(STEP_X, 12+32+8*4, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+			break;
+		case 5:gdi_image_draw_id(STEP_X, 12+32+8*4, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+			break;
+		case 6:gdi_image_draw_id(STEP_X, 12+32+8*4, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+			break;
+		case 7:gdi_image_draw_id(STEP_X, 12+32+8*4, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+			break;
+		case 8:gdi_image_draw_id(STEP_X, 12+32+8*4, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+			break;
+		case 9:gdi_image_draw_id(STEP_X, 12+32+8*4, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+			break;
+	}
+	
+	switch(n5)
+	{
+		case 0:gdi_image_draw_id(STEP_X, 12+32+8*5, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+			break;
+		case 1:gdi_image_draw_id(STEP_X, 12+32+8*5, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+			break;
+		case 2:gdi_image_draw_id(STEP_X, 12+32+8*5, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+			break;
+		case 3:gdi_image_draw_id(STEP_X, 12+32+8*5, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+			break;
+		case 4:gdi_image_draw_id(STEP_X, 12+32+8*5, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+			break;
+		case 5:gdi_image_draw_id(STEP_X, 12+32+8*5, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+			break;
+		case 6:gdi_image_draw_id(STEP_X, 12+32+8*5, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+			break;
+		case 7:gdi_image_draw_id(STEP_X, 12+32+8*5, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+			break;
+		case 8:gdi_image_draw_id(STEP_X, 12+32+8*5, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+			break;
+		case 9:gdi_image_draw_id(STEP_X, 12+32+8*5, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+			break;
+	}
+
+	switch(n6)
+	{
+		case 0:gdi_image_draw_id(STEP_X, 12+32+8*6, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+			break;
+		case 1:gdi_image_draw_id(STEP_X, 12+32+8*6, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+			break;
+		case 2:gdi_image_draw_id(STEP_X, 12+32+8*6, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+			break;
+		case 3:gdi_image_draw_id(STEP_X, 12+32+8*6, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+			break;
+		case 4:gdi_image_draw_id(STEP_X, 12+32+8*6, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+			break;
+		case 5:gdi_image_draw_id(STEP_X, 12+32+8*6, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+			break;
+		case 6:gdi_image_draw_id(STEP_X, 12+32+8*6, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+			break;
+		case 7:gdi_image_draw_id(STEP_X, 12+32+8*6, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+			break;
+		case 8:gdi_image_draw_id(STEP_X, 12+32+8*6, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+			break;
+		case 9:gdi_image_draw_id(STEP_X, 12+32+8*6, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+			break;
+	}
+
+	switch(n7)
+	{
+		case 0:gdi_image_draw_id(STEP_X, 12+32+8*7, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+			break;
+		case 1:gdi_image_draw_id(STEP_X, 12+32+8*7, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+			break;
+		case 2:gdi_image_draw_id(STEP_X, 12+32+8*7, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+			break;
+		case 3:gdi_image_draw_id(STEP_X, 12+32+8*7, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+			break;
+		case 4:gdi_image_draw_id(STEP_X, 12+32+8*7, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+			break;
+		case 5:gdi_image_draw_id(STEP_X, 12+32+8*7, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+			break;
+		case 6:gdi_image_draw_id(STEP_X, 12+32+8*7, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+			break;
+		case 7:gdi_image_draw_id(STEP_X, 12+32+8*7, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+			break;
+		case 8:gdi_image_draw_id(STEP_X, 12+32+8*7, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+			break;
+		case 9:gdi_image_draw_id(STEP_X, 12+32+8*7, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+			break;
+	}
+
+	switch(n8)
+	{
+		case 0:gdi_image_draw_id(STEP_X, 12+32+8*8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+			break;
+		case 1:gdi_image_draw_id(STEP_X, 12+32+8*8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_1);//主界面
+			break;
+		case 2:gdi_image_draw_id(STEP_X, 12+32+8*8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_2);//主界面
+			break;
+		case 3:gdi_image_draw_id(STEP_X, 12+32+8*8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_3);//主界面
+			break;
+		case 4:gdi_image_draw_id(STEP_X, 12+32+8*8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_4);//主界面
+			break;
+		case 5:gdi_image_draw_id(STEP_X, 12+32+8*8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_5);//主界面
+			break;
+		case 6:gdi_image_draw_id(STEP_X, 12+32+8*8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_6);//主界面
+			break;
+		case 7:gdi_image_draw_id(STEP_X, 12+32+8*8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_7);//主界面
+			break;
+		case 8:gdi_image_draw_id(STEP_X, 12+32+8*8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_8);//主界面
+			break;
+		case 9:gdi_image_draw_id(STEP_X, 12+32+8*8, IMG_TECHNO_DIGITAL_SMALL_CLOCK_9);//主界面
+			break;
+	}
+
+}
+
+void lcd_dis_on(void)
+{
+	lcd_switch_onoff_status_flag = LCD_SWITCH_ONOFF_STATUS_ON;
+	dis_onoff_flag = 1;
+}
+
+void lcd_dis_off(void)
+{
+	lcd_switch_onoff_status_flag = LCD_SWITCH_ONOFF_STATUS_OFF;
+	dis_onoff_flag = 0;
+}
+
+void lcd_refresh(void)
+{
+	StopTimer(LCD_TIMER);
+	
+#if 1
+	//
+	switch(lcd_ui_status_flag)
+	{
+		case LCD_UI_STATUS_MAIN_MENU0: 
+				gdi_image_draw_id(0, 0, IMG_SI_VIBRATE_THEN_RING);//主界面 先清屏
+				//gdi_image_draw_id(30, 60, IMG_TECHNO_DIGITAL_SMALL_CLOCK_0);//主界面
+				get_time();
+				//gdi_image_draw_id(0, 0, IMG_SI_ALARM_ACTIVATED);//主界面
+				dis_nian();
+				dis_yue();
+				dis_ri();
+				
+				dis_shi();
+				dis_fen();
+				
+				//dis_miao();
+				dis_xinhao();
+				dis_bat();
+				//dis_bat_status();
+				//dis_xingqi();
+				
+				////if(flag_Prox_data==1)
+				//	gdi_image_draw_id(25, 0, IMG_SI_CIRCLE_INDICATOR);//显示防拆图标
+
+				//	lcd_flag=GSENSOR_I2C_GET_BIT;	
+				//if(lcd_flag==1)
+				//	gdi_image_draw_id(25, 30, IMG_SI_CIRCLE_INDICATOR);//显示防拆图标			
+
+				//wgui_status_icon_bar_change_icon_level(STATUS_ICON_BATTERY_STRENGTH, 33);
+				//wgui_status_icon_bar_change_icon_level(STATUS_ICON_SUBLCD_BATTERY_STRENGTH, 33);
+
+				key_ini();
+				
+			break;
+		case LCD_UI_STATUS_MAIN_MENU1: 
+				//gdi_image_draw_id(0, 0, IMG_SI_MISSED_CALL_INDICATOR);//待机界面1
+				gdi_image_draw_id(0, 0, IMG_SI_VIBRATE_THEN_RING);//主界面 先清屏
+				gdi_image_draw_id(32, 12, IMG_SI_SMS_INDICATOR);//脚印
+				dis_step(Step_num); //2  计步
+				
+				
+			break;
+		case LCD_UI_STATUS_MAIN_MENU2: 
+				gdi_image_draw_id(0, 0, IMG_SI_MISSED_CALL_INDICATOR);//待机界面2 跌倒报警
+				//
+				//if( I2C_APDS9901_GET_STATUS() == APDS9901_STATUS_LOOSE )
+				//	gdi_image_draw_id(28, 100, IMG_SI_CIRCLE_INDICATOR);//显示防拆图标
+			break;
+		case LCD_UI_STATUS_VOICE_CHAT: 
+				gdi_image_draw_id(0, 0, IMG_SI_VIBRATE_AND_RING);//语音群聊界面	
+			break;
+		case LCD_UI_STATUS_DAD:
+				
+				gdi_image_draw_id(0, 0, IMG_SI_VIBRATE);//爸爸
+				
+				if( ( CALL_get_call_in_status_flag()!=CALL_IN_STATUS_END ) || ( CALL_get_call_out_status_flag()!=CALL_OUT_STATUS_END ) )
+					gdi_image_draw_id(0, 0, IMG_INCALL_CONNECT);// 
+
+
+			break;
+		case LCD_UI_STATUS_MOM:
+				gdi_image_draw_id(0, 0, IMG_SI_USB);//妈妈
+				
+				if( ( CALL_get_call_in_status_flag()!=CALL_IN_STATUS_END ) || ( CALL_get_call_out_status_flag()!=CALL_OUT_STATUS_END ) )
+					gdi_image_draw_id(0, 0, IMG_INCALL_CONNECT);// 
+				
+			break;
+		case LCD_UI_STATUS_GRANDPA:
+				gdi_image_draw_id(0, 0, IMG_SI_SILENT);//爷爷
+				
+				if( ( CALL_get_call_in_status_flag()!=CALL_IN_STATUS_END ) || ( CALL_get_call_out_status_flag()!=CALL_OUT_STATUS_END ) )
+					gdi_image_draw_id(0, 0, IMG_INCALL_CONNECT);// 
+			break;
+		case LCD_UI_STATUS_GRANDMA:
+				gdi_image_draw_id(0, 0, IMG_SI_ROAMING_INDICATOR);//奶奶
+
+				if( ( CALL_get_call_in_status_flag()!=CALL_IN_STATUS_END ) || ( CALL_get_call_out_status_flag()!=CALL_OUT_STATUS_END ) )
+					gdi_image_draw_id(0, 0, IMG_INCALL_CONNECT);// 
+			break;
+		case LCD_UI_STATUS_OTHER:
+				gdi_image_draw_id(0, 0, IMG_SI_RING);//其他
+				
+				if( ( CALL_get_call_in_status_flag()!=CALL_IN_STATUS_END ) || ( CALL_get_call_out_status_flag()!=CALL_OUT_STATUS_END ) )
+					gdi_image_draw_id(0, 0, IMG_INCALL_CONNECT);// 
+			break;
+
+	}
+#endif
+
+
+
+
+	lcd_dis_on();
+	gdi_layer_blt_previous(0, 0, 64 - 1, 128 - 1);//刷整个屏幕
+	lcd_dis_off();
+
+	key_ini();
+	
+	StartTimer(LCD_TIMER,200,lcd_refresh);//继续刷
+	
+}
+
+void dis_ini(void)
+{
+	lcd_dis_off();
+	//StartTimer(LCD_TIMER,200,lcd_refresh);//继续刷
+}
+
+//---------------------------display-------------------------------
+
+//---------------------------key-----------------------------------
+
+typedef enum
+{
+	KEY_LONG_STATUS_UNHAPPEN =0,
+	KEY_LONG_STATUS_HAPPEN
+} KEY_LONG_PRESS_STATUS;
+
+KEY_LONG_PRESS_STATUS key_long_press_status_flag = KEY_LONG_STATUS_UNHAPPEN;
+
+//注册按键后，按键触发注册的中断函数
+void key_power_KEY_EVENT_DOWN_interrupt(void)
+{
+	
+}
+
+static int a_count = 0;
+
+void VMC_ON(void)
+{
+	DRV_SetData(0xA07001C0,0x473,0x443);//
+}
+
+void VMC_OFF(void)
+{
+	DRV_SetData(0xA07001C0,0x473,0x2);//
+}
+
+void VIBR_ON(void)
+{
+	DRV_SetData(0xA07001B0,0x433,0x433);//
+}
+
+void VIBR_OFF(void)
+{
+	DRV_SetData(0xA07001B0,0x433,0x002);//
+}
+
+void key_power_KEY_EVENT_UP_interrupt(void)
+{
+
+	if ((a_count++)%2) {
+		VIBR_ON();
+	} else {
+		VIBR_OFF();
+	}
+
+	srv_gpio_setting_set_bl_time(10);
+
+#if 1
+	if( search_watch_status_flag == SEARCH_WATCH_STATUS_START)//如果是处于找手表状态  按键只结束找手表
+	{
+		stop_search_watch();
+	}
+	else if( call_listen_status_flag == CALL_LISTEN_STATUS_OFF )
+	{
+
+		if( ( CALL_get_call_in_status_flag()==CALL_IN_STATUS_END ) && ( CALL_get_call_out_status_flag()==CALL_OUT_STATUS_END ) )
+		{
+			switch(lcd_ui_status_flag)
+			{
+				case LCD_UI_STATUS_MAIN_MENU0:
+						lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU1;
+					break;
+				case LCD_UI_STATUS_MAIN_MENU1:
+						//lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU2;
+						lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU0;
+					break;
+				case LCD_UI_STATUS_MAIN_MENU2:
+						lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU0;
+					break;
+				case LCD_UI_STATUS_VOICE_CHAT:
+						lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU0;
+					break;
+				case LCD_UI_STATUS_DAD:
+						lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU0;
+					break;
+				case LCD_UI_STATUS_MOM:
+						lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU0;
+					break;
+				case LCD_UI_STATUS_GRANDPA:
+						lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU0;
+					break;
+				case LCD_UI_STATUS_GRANDMA:
+						lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU0;
+					break;
+				case LCD_UI_STATUS_OTHER:
+						lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU0;
+					break;
+			}
+				
+		}
+
+		if( CALL_get_call_out_status_flag()==CALL_OUT_STATUS_START)
+		{
+			CALL_outgoing_disconnect();//正在 往外拨电话
+		}
+		
+		if( CALL_get_call_in_status_flag()==CALL_IN_STATUS_INCOMING )
+		{
+			CALL_incoming_disconnect();//挂断 正在响铃的 来电
+
+			//开启了自动接听  挂断了 就停止接通了
+			if( call_automatic_answering_status_flag == CALL_AUTOMATIC_ANSWERING_STATUS_ON )
+				StopTimer(CALL_TIMER);
+		}
+		if( CALL_get_call_in_status_flag()==CALL_IN_STATUS_IN )
+		{
+			CALL_in_disconnect();// 挂断 已经接通 正在通话的 来电
+		}
+
+
+
+	}
+#endif
+}
+
+U8 u8RecorderCounter = 0;
+
+void ApolloRecordTimerCounter(void){
+	u8RecorderCounter ++;
+	StartTimer(APOLLO_RECORDER_TIMECOUNT_TIMER, 1000, ApolloRecordTimerCounter);
+}
+
+void key_1_KEY_EVENT_DOWN_interrupt(void)
+{
+	srv_gpio_setting_set_bl_time(10);
+}//SEND键
+
+void key_1_KEY_EVENT_UP_interrupt(void)//SEND键
+{
+	kal_prompt_trace(MOD_YXAPP," key_1_KEY_EVENT_UP_interrupt 2\n");
+	srv_gpio_setting_set_bl_time(10);
+
+#if 1
+	if( search_watch_status_flag == SEARCH_WATCH_STATUS_START)//如果是处于找手表状态  按键只结束找手表
+	{
+		stop_search_watch();
+	}
+	else if( call_listen_status_flag == CALL_LISTEN_STATUS_OFF )
+	{
+
+		//	按键松开再触发，松开后检测 是长按还是短按的松开
+		if(key_long_press_status_flag == KEY_LONG_STATUS_HAPPEN)//长按松开
+		{
+			switch (lcd_ui_status_flag) {
+			case LCD_UI_STATUS_VOICE_CHAT:
+				if (u8RecorderCounter >= 2 && u8RecorderCounter <= 15) {
+//					YxAppSendMsgToMMIMod(APOLLO_MSG_STOP_RECORDER, 0, 0);
+				}
+				u8RecorderCounter = 0;
+				break;
+			}
+		}
+		else//短按松开
+		{
+			if( ( CALL_get_call_in_status_flag()==CALL_IN_STATUS_END ) && ( CALL_get_call_out_status_flag()==CALL_OUT_STATUS_END ) )
+			{
+
+				switch(lcd_ui_status_flag)
+				{
+					case LCD_UI_STATUS_MAIN_MENU0:
+							lcd_ui_status_flag = LCD_UI_STATUS_VOICE_CHAT;
+						break;
+					case LCD_UI_STATUS_MAIN_MENU1:
+							lcd_ui_status_flag = LCD_UI_STATUS_VOICE_CHAT;
+						break;
+					case LCD_UI_STATUS_MAIN_MENU2:
+							lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU0;
+						break;
+					case LCD_UI_STATUS_VOICE_CHAT:
+							lcd_ui_status_flag = LCD_UI_STATUS_DAD;
+						break;
+					case LCD_UI_STATUS_DAD:
+							lcd_ui_status_flag = LCD_UI_STATUS_VOICE_CHAT;
+						break;
+					case LCD_UI_STATUS_MOM:
+							lcd_ui_status_flag = LCD_UI_STATUS_GRANDPA;
+						break;
+					case LCD_UI_STATUS_GRANDPA:
+							lcd_ui_status_flag = LCD_UI_STATUS_GRANDMA;
+						break;
+					case LCD_UI_STATUS_GRANDMA:
+							lcd_ui_status_flag = LCD_UI_STATUS_OTHER;
+						break;
+					case LCD_UI_STATUS_OTHER:
+							lcd_ui_status_flag = LCD_UI_STATUS_VOICE_CHAT;
+						break;
+				}		
+
+			}
+			else if( CALL_get_call_in_status_flag() == CALL_IN_STATUS_INCOMING )
+			{
+				CALL_incoming_connect();
+
+				//开启了自动接听  已经接通了 就停止接通了
+				if( call_automatic_answering_status_flag == CALL_AUTOMATIC_ANSWERING_STATUS_ON )
+					StopTimer(CALL_TIMER);
+			}
+		}
+
+
+
+		key_long_press_status_flag = KEY_LONG_STATUS_UNHAPPEN;
+		
+	}	
+
+#endif
+}
+
+
+
+void key_1_KEY_LONG_PRESS_interrupt(void)//SEND键
+{
+	key_long_press_status_flag = KEY_LONG_STATUS_HAPPEN;
+	//长按处理
+	if( search_watch_status_flag == SEARCH_WATCH_STATUS_START)//如果是处于找手表状态  按键只结束找手表
+	{
+		stop_search_watch();
+	}	
+	else if( call_listen_status_flag == CALL_LISTEN_STATUS_OFF )
+	{
+		switch(lcd_ui_status_flag)
+		{
+			case LCD_UI_STATUS_MAIN_MENU0:
+					 
+				break;
+			case LCD_UI_STATUS_MAIN_MENU1:
+					 
+				break;
+			case LCD_UI_STATUS_MAIN_MENU2:
+				
+				break;
+			case LCD_UI_STATUS_VOICE_CHAT: //start recorder
+				u8RecorderCounter = 0;
+				StartTimer(APOLLO_RECORDER_TIMECOUNT_TIMER, 1000, ApolloRecordTimerCounter);
+				YxAppSendMsgToMMIMod(APOLLO_MSG_START_RECORDER, 0, 0);
+				break;
+			case LCD_UI_STATUS_DAD:
+				if( ( CALL_get_call_in_status_flag()==CALL_IN_STATUS_END ) && ( CALL_get_call_out_status_flag()==CALL_OUT_STATUS_END ) )
+				{
+					CALL_out();//电话拨出
+					
+					key_long_press_status_flag = KEY_LONG_STATUS_UNHAPPEN;
+				}				 
+				break;
+			case LCD_UI_STATUS_MOM:
+				if( ( CALL_get_call_in_status_flag()==CALL_IN_STATUS_END ) && ( CALL_get_call_out_status_flag()==CALL_OUT_STATUS_END ) )
+				{
+					CALL_out();//电话拨出
+					
+					key_long_press_status_flag = KEY_LONG_STATUS_UNHAPPEN;
+				}					 
+				break;
+			case LCD_UI_STATUS_GRANDPA:
+				if( ( CALL_get_call_in_status_flag()==CALL_IN_STATUS_END ) && ( CALL_get_call_out_status_flag()==CALL_OUT_STATUS_END ) )
+				{
+					CALL_out();//电话拨出
+					
+					key_long_press_status_flag = KEY_LONG_STATUS_UNHAPPEN;
+				}					 
+				break;
+			case LCD_UI_STATUS_GRANDMA:
+				if( ( CALL_get_call_in_status_flag()==CALL_IN_STATUS_END ) && ( CALL_get_call_out_status_flag()==CALL_OUT_STATUS_END ) )
+				{
+					CALL_out();//电话拨出
+					
+					key_long_press_status_flag = KEY_LONG_STATUS_UNHAPPEN;
+				}					 
+				break;
+			case LCD_UI_STATUS_OTHER:
+				if( ( CALL_get_call_in_status_flag()==CALL_IN_STATUS_END ) && ( CALL_get_call_out_status_flag()==CALL_OUT_STATUS_END ) )
+				{
+					CALL_out();//电话拨出
+					
+					key_long_press_status_flag = KEY_LONG_STATUS_UNHAPPEN;
+				}					 
+				break;
+		}		
+
+	}
+
+}
+
+void key_1_KEY_REPEAT_interrupt(void){ }//SEND键
+
+void key_2_KEY_EVENT_DOWN_interrupt(void)
+{
+#if 0
+	static unsigned char i=1;
+	if(i==0)
+	{
+		i=1;
+
+		gps_start();
+	}
+	else
+	{
+		i=0;
+		
+		gps_end();
+	}	
+#else
+	kal_prompt_trace(MOD_YXAPP,"{wbj_debug} key_2_KEY_EVENT_DOWN_interrupt\n");
+	YxAppSendMsgToMMIMod(APOLLO_PLAY_RECV_VOICE_DATA, 0, 0);
+#endif
+}
+void key_2_KEY_EVENT_UP_interrupt(void)
+{
+
+}
+
+void key_2_KEY_LONG_PRESS_interrupt(void){}
+
+void key_2_KEY_REPEAT_interrupt(void){}
+
+void key_3_KEY_EVENT_DOWN_interrupt(void)
+{
+	static unsigned char i=1;
+	if(i==0)
+	{
+		i=1;
+		WIFI_start();
+	}
+	else
+	{
+		i=0;
+		WIFI_end();
+	}
+	
+}
+
+void key_3_KEY_EVENT_UP_interrupt(void){}
+
+void key_3_KEY_LONG_PRESS_interrupt(void){}
+
+void key_3_KEY_REPEAT_interrupt(void){}
+
+void key_4_KEY_EVENT_DOWN_interrupt(void)
+{
+	static unsigned char i=1;
+	if(i==0)
+	{
+		i=1;
+		ble_power_on();
+	}
+	else
+	{
+		i=0;
+		ble_power_off();
+	}
+}
+
+void key_4_KEY_EVENT_UP_interrupt(void){}
+
+void key_4_KEY_LONG_PRESS_interrupt(void){}
+
+void key_4_KEY_REPEAT_interrupt(void){}
+
+void key_5_KEY_EVENT_DOWN_interrupt(void)
+{
+	//lbs_get_value();
+	lbs_start();
+}
+
+void key_5_KEY_EVENT_UP_interrupt(void){}
+
+void key_5_KEY_LONG_PRESS_interrupt(void){}
+
+void key_5_KEY_REPEAT_interrupt(void){}
+
+void key_6_KEY_EVENT_DOWN_interrupt(void)
+{
+//远程关机
+	Shutdown_cmd();
+}
+
+void key_6_KEY_EVENT_UP_interrupt(void){}
+
+void key_6_KEY_LONG_PRESS_interrupt(void){}
+
+void key_6_KEY_REPEAT_interrupt(void){}
+
+void key_7_KEY_EVENT_DOWN_interrupt(void)
+{
+	static unsigned char i=1;
+	if(i==0)
+	{
+		i=1;
+		start_search_watch();
+	}
+	else
+	{
+		i=0;
+		stop_search_watch();
+	}
+}
+
+void key_7_KEY_EVENT_UP_interrupt(void){}
+
+void key_7_KEY_LONG_PRESS_interrupt(void){}
+
+void key_7_KEY_REPEAT_interrupt(void){}
+
+void key_8_KEY_EVENT_DOWN_interrupt(void)
+{
+	CALL_listen_start();
+}
+
+void key_8_KEY_EVENT_UP_interrupt(void){}
+
+void key_8_KEY_LONG_PRESS_interrupt(void){}
+
+void key_8_KEY_REPEAT_interrupt(void){}
+
+void key_9_KEY_EVENT_DOWN_interrupt(void)
+{
+	Telephone_Bill_Enquiry("13530514107");//查话费
+}
+
+void key_9_KEY_EVENT_UP_interrupt(void){}
+
+void key_9_KEY_LONG_PRESS_interrupt(void){}
+
+void key_9_KEY_REPEAT_interrupt(void){}
+
+void key_10_KEY_EVENT_DOWN_interrupt(void)
+{
+	//拒绝陌生人来电
+	static unsigned char i=1;
+	if(i)
+	{
+		i=0;
+		CALL_refused_to_stranger_calls_on();//拒绝
+	}
+	else
+	{
+		i=1;
+		CALL_refused_to_stranger_calls_off();//不拒绝
+	}
+}
+void key_10_KEY_EVENT_UP_interrupt(void){}
+
+void key_10_KEY_LONG_PRESS_interrupt(void){}
+
+void key_10_KEY_REPEAT_interrupt(void){}
+
+void key_11_KEY_EVENT_DOWN_interrupt(void)
+{
+	static unsigned char i=1;
+	if(i)
+	{
+		i=0;
+		CALL_automatic_answering_status_on();//自动接听开
+	}
+	else
+	{
+		i=1;
+		CALL_automatic_answering_status_off();
+	}
+}
+void key_11_KEY_EVENT_UP_interrupt(void){}
+
+void key_11_KEY_LONG_PRESS_interrupt(void){}
+
+void key_11_KEY_REPEAT_interrupt(void){}
+
+void key_12_KEY_EVENT_DOWN_interrupt(void)
+{
+	static unsigned char i=1;
+	if(i)
+	{
+		i=0;
+		mute_mode_open();
+	}
+	else
+	{
+		i=1;
+		mute_mode_close();
+	}
+}
+
+void key_12_KEY_EVENT_UP_interrupt(void){}
+
+void key_12_KEY_LONG_PRESS_interrupt(void){}
+
+void key_12_KEY_REPEAT_interrupt(void){}
+
+void key_13_KEY_EVENT_DOWN_interrupt(void)
+{
+	static unsigned char i=1;
+	if(i)
+	{
+		i=0;
+		yaoyiyao_open();
+	}
+	else
+	{
+		i=1;
+		yaoyiyao_close();
+	}
+}
+
+void key_13_KEY_EVENT_UP_interrupt(void){}
+
+void key_13_KEY_LONG_PRESS_interrupt(void){}
+
+void key_13_KEY_REPEAT_interrupt(void){}
+
+void key_14_KEY_EVENT_DOWN_interrupt(void)
+{
+	static unsigned char i=1;
+	if(i)
+	{
+		i=0;
+		hand_mode_open();
+	}
+	else
+	{
+		i=1;
+		hand_mode_close();
+	}
+
+}
+
+void key_14_KEY_EVENT_UP_interrupt(void){}
+
+void key_14_KEY_LONG_PRESS_interrupt(void){}
+
+void key_14_KEY_REPEAT_interrupt(void){}
+
+void key_15_KEY_EVENT_DOWN_interrupt(void)
+{
+	static unsigned char i=1;
+	if(i)
+	{
+		i=0;
+		motor_en();
+	}
+	else
+	{
+		i=1;
+		motor_disen();
+	}
+}
+
+void key_15_KEY_EVENT_UP_interrupt(void){}
+
+void key_15_KEY_LONG_PRESS_interrupt(void){}
+
+void key_15_KEY_REPEAT_interrupt(void){}
+
+void key_16_KEY_EVENT_DOWN_interrupt(void)
+{
+
+	
+}
+
+void key_16_KEY_EVENT_UP_interrupt(void){}
+
+void key_16_KEY_LONG_PRESS_interrupt(void){}
+
+void key_16_KEY_REPEAT_interrupt(void){}
+
+void key_ini(void)
+{
+	SetKeyHandler(key_power_KEY_EVENT_DOWN_interrupt, KEY_END, KEY_EVENT_DOWN);//key_power
+	SetKeyHandler(key_power_KEY_EVENT_UP_interrupt, KEY_END, KEY_EVENT_UP);//key_power
+
+	SetKeyHandler(key_1_KEY_EVENT_DOWN_interrupt, KEY_SEND, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_1_KEY_EVENT_UP_interrupt, KEY_SEND, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_1_KEY_LONG_PRESS_interrupt, KEY_SEND, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_1_KEY_REPEAT_interrupt, KEY_SEND, KEY_REPEAT);//key_1
+
+
+	//SetKeyHandler(key_1_KEY_EVENT_DOWN_interrupt, KEY_0 , KEY_EVENT_DOWN);//key_1
+	//SetKeyHandler(key_1_KEY_EVENT_UP_interrupt, KEY_0 , KEY_EVENT_UP);//key_1
+	//SetKeyHandler(key_1_KEY_LONG_PRESS_interrupt, KEY_0 , KEY_LONG_PRESS);//key_1
+	//SetKeyHandler(key_1_KEY_REPEAT_interrupt, KEY_0 , KEY_REPEAT);//key_1
+	
+#if 0
+	SetKeyHandler(key_3_KEY_EVENT_DOWN_interrupt, KEY_1, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_3_KEY_EVENT_UP_interrupt, KEY_1, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_3_KEY_LONG_PRESS_interrupt, KEY_1, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_3_KEY_REPEAT_interrupt, KEY_1, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_4_KEY_EVENT_DOWN_interrupt, KEY_2, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_4_KEY_EVENT_UP_interrupt, KEY_2, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_4_KEY_LONG_PRESS_interrupt, KEY_2, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_4_KEY_REPEAT_interrupt, KEY_2, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_5_KEY_EVENT_DOWN_interrupt, KEY_3, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_5_KEY_EVENT_UP_interrupt, KEY_3, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_5_KEY_LONG_PRESS_interrupt, KEY_3, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_5_KEY_REPEAT_interrupt, KEY_3, KEY_REPEAT);//key_1
+
+	
+	SetKeyHandler(key_6_KEY_EVENT_DOWN_interrupt, KEY_4, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_6_KEY_EVENT_UP_interrupt, KEY_4, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_6_KEY_LONG_PRESS_interrupt, KEY_4, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_6_KEY_REPEAT_interrupt, KEY_4, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_7_KEY_EVENT_DOWN_interrupt, KEY_5, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_7_KEY_EVENT_UP_interrupt, KEY_5, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_7_KEY_LONG_PRESS_interrupt, KEY_5, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_7_KEY_REPEAT_interrupt, KEY_5, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_8_KEY_EVENT_DOWN_interrupt, KEY_6, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_8_KEY_EVENT_UP_interrupt, KEY_6, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_8_KEY_LONG_PRESS_interrupt, KEY_6, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_8_KEY_REPEAT_interrupt, KEY_6, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_9_KEY_EVENT_DOWN_interrupt, KEY_7, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_9_KEY_EVENT_UP_interrupt, KEY_7, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_9_KEY_LONG_PRESS_interrupt, KEY_7, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_9_KEY_REPEAT_interrupt, KEY_7, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_10_KEY_EVENT_DOWN_interrupt,KEY_8, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_10_KEY_EVENT_UP_interrupt, KEY_8, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_10_KEY_LONG_PRESS_interrupt, KEY_8, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_10_KEY_REPEAT_interrupt, KEY_8, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_11_KEY_EVENT_DOWN_interrupt, KEY_9, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_11_KEY_EVENT_UP_interrupt,KEY_9, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_11_KEY_LONG_PRESS_interrupt, KEY_9, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_11_KEY_REPEAT_interrupt, KEY_9, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_12_KEY_EVENT_DOWN_interrupt, KEY_VOL_UP, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_12_KEY_EVENT_UP_interrupt,KEY_VOL_UP, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_12_KEY_LONG_PRESS_interrupt, KEY_VOL_UP, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_12_KEY_REPEAT_interrupt, KEY_VOL_UP, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_13_KEY_EVENT_DOWN_interrupt, KEY_VOL_DOWN, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_13_KEY_EVENT_UP_interrupt,KEY_VOL_DOWN, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_13_KEY_LONG_PRESS_interrupt, KEY_VOL_DOWN, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_13_KEY_REPEAT_interrupt, KEY_VOL_DOWN, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_14_KEY_EVENT_DOWN_interrupt, KEY_UP_ARROW, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_14_KEY_EVENT_UP_interrupt,KEY_UP_ARROW, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_14_KEY_LONG_PRESS_interrupt, KEY_UP_ARROW, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_14_KEY_REPEAT_interrupt, KEY_UP_ARROW, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_15_KEY_EVENT_DOWN_interrupt, KEY_DOWN_ARROW, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_15_KEY_EVENT_UP_interrupt,KEY_DOWN_ARROW, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_15_KEY_LONG_PRESS_interrupt, KEY_DOWN_ARROW, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_15_KEY_REPEAT_interrupt, KEY_DOWN_ARROW, KEY_REPEAT);//key_1
+
+	SetKeyHandler(key_16_KEY_EVENT_DOWN_interrupt, KEY_LEFT_ARROW, KEY_EVENT_DOWN);//key_1
+	SetKeyHandler(key_16_KEY_EVENT_UP_interrupt,KEY_LEFT_ARROW, KEY_EVENT_UP);//key_1
+	SetKeyHandler(key_16_KEY_LONG_PRESS_interrupt, KEY_LEFT_ARROW, KEY_LONG_PRESS);//key_1
+	SetKeyHandler(key_16_KEY_REPEAT_interrupt, KEY_LEFT_ARROW, KEY_REPEAT);//key_1
+
+#endif
+
+}
+
+//---------------------------key-----------------------------------
+
+
+//---------------------------gps-----------------------------------
+#define LAT_LNG_LIST_SIZE		12
+
+unsigned char JW_value[10];
+int JW_height = 0;
+LatLng	mLatLngList[LAT_LNG_LIST_SIZE];
+unsigned char mIndex = 0;
+
+GPS_SATELLITE_STATUS gps_satellite_status_flag = GPS_SATELLITE_STATUS_NONE;
+GPS_DATA_STATUS gps_data_status_flag = GPS_DATA_STATUS_NONE;
+
+extern YXGPSPARAMSTR  yxGpsParam;
+
+extern void GPIO_ModeSetup(kal_uint16 pin, kal_uint16 conf_dada);
+extern void GPIO_InitIO(char direction, char port);
+extern void GPIO_WriteIO(char data, char port);
+
+extern void GpsResetValues(void);
+
+
+//---------------------------led-----------------------------------
+
+void led1_on(void)
+{
+	GPIO_WriteIO(1,0);
+}
+
+void led1_off(void)
+{
+	GPIO_WriteIO(0,0);
+}
+void led2_on(void)
+{
+	GPIO_WriteIO(1,2);
+}
+
+void led2_off(void)
+{
+	GPIO_WriteIO(0,2);
+}
+
+
+
+
+void gps_power_on(void)
+{
+	//GPIO_ModeSetup(4,0);
+	//GPIO_InitIO(1,4);//gpio4 out
+	//GPIO_WriteIO(1,4);//gpio4  high
+#ifndef  WIN32
+	//VIBR_ON();
+	VMC_ON();
+#endif
+
+}
+
+void gps_power_off(void)
+{
+	//GPIO_ModeSetup(4,0);
+	//GPIO_InitIO(1,4);//gpio4 out
+	//GPIO_WriteIO(0,4);//gpio4  0
+#ifndef  WIN32
+	//VIBR_OFF();
+	VMC_OFF();
+#endif
+
+}
+
+void gps_start(void)
+{
+	unsigned char i=0, j = 0;
+	for(i=0;i<10;i++) 
+		JW_value[i]=0;
+	
+	gps_satellite_status_flag = GPS_SATELLITE_STATUS_NONE;
+	gps_data_status_flag = GPS_DATA_STATUS_NONE;
+
+	GpsResetValues();
+	
+	if(uart_status_flag == UART_STATUS_ON) return;
+	else Uart2_open(UART_BAUD_9600);
+
+	uart_status_flag = UART_STATUS_ON;
+	
+	//串口用于GPS
+	uart_function_flag = UART_FUNCTION_GPS;
+	
+	gps_power_on();
+
+	for (i = 0;i < LAT_LNG_LIST_SIZE;i ++) {
+		memset(mLatLngList, 0, LAT_LNG_LIST_SIZE * sizeof(LatLng));
+	}
+	mIndex = 0;
+	 
+}
+
+void gps_end(void)
+{
+	unsigned char i=0;
+	for(i=0;i<10;i++)
+		JW_value[i]=0;
+	
+	gps_satellite_status_flag = GPS_SATELLITE_STATUS_NONE;
+	gps_data_status_flag = GPS_DATA_STATUS_NONE;
+
+	GpsResetValues();
+	
+	gps_power_off();
+
+	if(uart_status_flag == UART_STATUS_ON)
+	{
+		Uart2_close();
+	}
+	
+	uart_status_flag = UART_STATUS_OFF;
+
+	uart_function_flag = UART_FUNCTION_NONE;
+}
+
+GPS_SATELLITE_STATUS gps_get_satellite_status_flag(void)
+{
+	return gps_satellite_status_flag;
+}
+
+GPS_DATA_STATUS gps_get_data_status_flag(void)
+{
+	return gps_data_status_flag;
+}
+
+void gps_ready(void)
+{
+	gps_satellite_status_flag = GPS_SATELLITE_STATUS_EXIST;
+}
+
+void gps_data_ready(void)
+{
+	gps_data_status_flag = GPS_DATA_STATUS_OK;
+}
+
+void gps_process(void)
+{
+	unsigned char JW_temp[10];
+	
+	//JW_temp[0]
+	double a = yxGpsParam.longitudev[0],b = yxGpsParam.latitudev[0], c = yxGpsParam.hightv[0];
+	unsigned char aaa[20] = {0};
+	unsigned char bbb[20] = {0};
+	unsigned char ccc[20] = {0};
+	unsigned char temp=0;
+	LatLng tempLatLng = {0};
+	unsigned char i, j;		
+	int high = 0;
+#if 0	
+	if (mIndex++ < 18)  return ;
+
+	sprintf(aaa,"%.6f",a);	
+	sprintf(bbb,"%.6f",b);
+
+	kal_prompt_trace(MOD_YXAPP," aaa Lng :%s, lat:%s\n", aaa, bbb);
+	
+	for(i=0;i<10;i++)
+		JW_temp[i]=0;
+	
+	if(a<0)
+	{
+		a*=-1;
+
+		JW_temp[1]|=0x01;
+	}
+
+	if(b<0)
+	{
+		b*=-1;
+
+		JW_temp[6]|=0x01;
+	}
+
+
+
+	temp=strlen(aaa);
+	if(temp==8)
+	{
+		JW_temp[1]|=( (aaa[0]-0x30) <<4 );
+
+		JW_temp[2]|=( (aaa[2]-0x30) <<4 );
+		JW_temp[2]|=( (aaa[3]-0x30)  );
+		JW_temp[3]|=( (aaa[4]-0x30) <<4 );
+		JW_temp[3]|=( (aaa[5]-0x30)  ); 	
+		JW_temp[4]|=( (aaa[6]-0x30) <<4 );
+		JW_temp[4]|=( (aaa[7]-0x30)  );
+	}
+	else if(temp==9)
+	{
+		JW_temp[0]|=( (aaa[0]-0x30)  );
+		JW_temp[1]|=( (aaa[1]-0x30) <<4 );
+		
+		JW_temp[2]|=( (aaa[3]-0x30) <<4 );
+		JW_temp[2]|=( (aaa[4]-0x30)  );
+		JW_temp[3]|=( (aaa[5]-0x30) <<4 );
+		JW_temp[3]|=( (aaa[6]-0x30)  ); 	
+		JW_temp[4]|=( (aaa[7]-0x30) <<4 );
+		JW_temp[4]|=( (aaa[8]-0x30)  );
+	}
+	else if(temp==10)
+	{
+		JW_temp[0]|=( (aaa[0]-0x30) <<4 );
+		JW_temp[0]|=( (aaa[1]-0x30));
+		JW_temp[1]|=( (aaa[2]-0x30) <<4 );		
+
+		JW_temp[2]|=( (aaa[4]-0x30) <<4 );
+		JW_temp[2]|=( (aaa[5]-0x30)  );
+		JW_temp[3]|=( (aaa[6]-0x30) <<4 );
+		JW_temp[3]|=( (aaa[7]-0x30)  ); 	
+		JW_temp[4]|=( (aaa[8]-0x30) <<4 );
+		JW_temp[4]|=( (aaa[9]-0x30)  );
+	}
+
+	temp=strlen(bbb);
+	if(temp==8)
+	{
+		JW_temp[6]|=( (bbb[0]-0x30) <<4 );
+
+		JW_temp[7]|=( (bbb[2]-0x30) <<4 );
+		JW_temp[7]|=( (bbb[3]-0x30)  );
+		JW_temp[8]|=( (bbb[4]-0x30) <<4 );
+		JW_temp[8]|=( (bbb[5]-0x30)  ); 	
+		JW_temp[9]|=( (bbb[6]-0x30) <<4 );
+		JW_temp[9]|=( (bbb[7]-0x30)  ); 	
+	}
+	else if(temp==9)
+	{
+		JW_temp[5]|=( (bbb[0]-0x30)  );
+		JW_temp[6]|=( (bbb[1]-0x30) <<4 );
+		
+		JW_temp[7]|=( (bbb[3]-0x30) <<4 );
+		JW_temp[7]|=( (bbb[4]-0x30)  );
+		JW_temp[8]|=( (bbb[5]-0x30) <<4 );
+		JW_temp[8]|=( (bbb[6]-0x30)  ); 	
+		JW_temp[9]|=( (bbb[7]-0x30) <<4 );
+		JW_temp[9]|=( (bbb[8]-0x30)  ); 	
+	}
+	
+	for(i=0;i<10;i++)
+		JW_value[i]=JW_temp[i];
+
+	gps_data_ready();
+#endif
+#if 1
+	if (mIndex++ < 10)  return ;
+	mLatLngList[mIndex-10].lat = yxGpsParam.latitudev[0];
+	mLatLngList[mIndex-10].lng = yxGpsParam.longitudev[0];
+	mLatLngList[mIndex-10].high = yxGpsParam.hightv[0];
+
+	sprintf(aaa,"%.6f",a);	
+	sprintf(bbb,"%.6f",b);
+	kal_prompt_trace(MOD_YXAPP," xxxxxxxxx Lng :%s, lat:%s\n", aaa, bbb);
+	//mIndex ++;
+
+	if (mIndex-10 == LAT_LNG_LIST_SIZE-1) { //数据满
+
+		for (i = 0;i < LAT_LNG_LIST_SIZE;i ++) {
+			for (j = i+1;j < LAT_LNG_LIST_SIZE;j ++) {
+				if ((mLatLngList[i].lat + mLatLngList[i].lng) > (mLatLngList[j].lat + mLatLngList[j].lng)) {
+					tempLatLng.lat = mLatLngList[i].lat;
+					tempLatLng.lng = mLatLngList[i].lng;
+
+					mLatLngList[i].lat = mLatLngList[j].lat;
+					mLatLngList[i].lng = mLatLngList[j].lng;
+
+					mLatLngList[j].lat = tempLatLng.lat;
+					mLatLngList[j].lng = tempLatLng.lng;
+				}
+			}
+		}
+
+		tempLatLng.lat = 0;
+		tempLatLng.lng = 0;
+		tempLatLng.high = 0;
+
+		for (i = LAT_LNG_LIST_SIZE * 1 / 4;i < LAT_LNG_LIST_SIZE * 3 / 4;i ++) {
+			tempLatLng.lat += mLatLngList[i].lat;
+			tempLatLng.lng += mLatLngList[i].lng;
+			tempLatLng.high += mLatLngList[i].high;
+		}
+
+		tempLatLng.lat /= (LAT_LNG_LIST_SIZE/2);
+		tempLatLng.lng /=  (LAT_LNG_LIST_SIZE/2);
+		tempLatLng.high /= (LAT_LNG_LIST_SIZE/2);
+
+		b = tempLatLng.lat;
+		a = tempLatLng.lng;
+		c = tempLatLng.high;
+
+		JW_height = (int)(c+0.5);
+		kal_prompt_trace(MOD_YXAPP," eeee JW_height:%d\n", JW_height);
+		//memset(aaa, 0, 20);
+		//memset(bbb, 0, 20);
+		for (i = 0;i < 20;i++) {
+			aaa[i] = 0;
+			bbb[i] = 0;
+			ccc[i] = 0;
+		}
+		sprintf(aaa,"%.6f",a);	
+		sprintf(bbb,"%.6f",b);
+
+		kal_prompt_trace(MOD_YXAPP," aaa Lng :%s, lat:%s\n", aaa, bbb);
+		
+		for(i=0;i<10;i++)
+			JW_temp[i]=0;
+		
+		if(a<0)
+		{
+			a*=-1;
+
+			JW_temp[1]|=0x01;
+		}
+
+		if(b<0)
+		{
+			b*=-1;
+
+			JW_temp[6]|=0x01;
+		}
+
+	
+
+		temp=strlen(aaa);
+		if(temp==8)
+		{
+			JW_temp[1]|=( (aaa[0]-0x30) <<4 );
+
+			JW_temp[2]|=( (aaa[2]-0x30) <<4 );
+			JW_temp[2]|=( (aaa[3]-0x30)  );
+			JW_temp[3]|=( (aaa[4]-0x30) <<4 );
+			JW_temp[3]|=( (aaa[5]-0x30)  ); 	
+			JW_temp[4]|=( (aaa[6]-0x30) <<4 );
+			JW_temp[4]|=( (aaa[7]-0x30)  );
+		}
+		else if(temp==9)
+		{
+			JW_temp[0]|=( (aaa[0]-0x30)  );
+			JW_temp[1]|=( (aaa[1]-0x30) <<4 );
+			
+			JW_temp[2]|=( (aaa[3]-0x30) <<4 );
+			JW_temp[2]|=( (aaa[4]-0x30)  );
+			JW_temp[3]|=( (aaa[5]-0x30) <<4 );
+			JW_temp[3]|=( (aaa[6]-0x30)  ); 	
+			JW_temp[4]|=( (aaa[7]-0x30) <<4 );
+			JW_temp[4]|=( (aaa[8]-0x30)  );
+		}
+		else if(temp==10)
+		{
+			JW_temp[0]|=( (aaa[0]-0x30) <<4 );
+			JW_temp[0]|=( (aaa[1]-0x30));
+			JW_temp[1]|=( (aaa[2]-0x30) <<4 );		
+
+			JW_temp[2]|=( (aaa[4]-0x30) <<4 );
+			JW_temp[2]|=( (aaa[5]-0x30)  );
+			JW_temp[3]|=( (aaa[6]-0x30) <<4 );
+			JW_temp[3]|=( (aaa[7]-0x30)  ); 	
+			JW_temp[4]|=( (aaa[8]-0x30) <<4 );
+			JW_temp[4]|=( (aaa[9]-0x30)  );
+		}
+
+		temp=strlen(bbb);
+		if(temp==8)
+		{
+			JW_temp[6]|=( (bbb[0]-0x30) <<4 );
+
+			JW_temp[7]|=( (bbb[2]-0x30) <<4 );
+			JW_temp[7]|=( (bbb[3]-0x30)  );
+			JW_temp[8]|=( (bbb[4]-0x30) <<4 );
+			JW_temp[8]|=( (bbb[5]-0x30)  ); 	
+			JW_temp[9]|=( (bbb[6]-0x30) <<4 );
+			JW_temp[9]|=( (bbb[7]-0x30)  ); 	
+		}
+		else if(temp==9)
+		{
+			JW_temp[5]|=( (bbb[0]-0x30)  );
+			JW_temp[6]|=( (bbb[1]-0x30) <<4 );
+			
+			JW_temp[7]|=( (bbb[3]-0x30) <<4 );
+			JW_temp[7]|=( (bbb[4]-0x30)  );
+			JW_temp[8]|=( (bbb[5]-0x30) <<4 );
+			JW_temp[8]|=( (bbb[6]-0x30)  ); 	
+			JW_temp[9]|=( (bbb[7]-0x30) <<4 );
+			JW_temp[9]|=( (bbb[8]-0x30)  ); 	
+		}
+		
+		for(i=0;i<10;i++)
+			JW_value[i]=JW_temp[i];
+		gps_data_ready();
+
+	}
+#endif
+	//kal_printf("mofan: |%s|  (%2x%2x%x%x%x)  \n", aaa, JW_temp[0], JW_temp[1], JW_temp[2], JW_temp[3], JW_temp[4]);
+	//kal_printf("mofan: |%s|  (%2x%2x%x%x%x)  \n", bbb, JW_temp[5], JW_temp[6], JW_temp[7], JW_temp[8], JW_temp[9]);
+
+}
+
+//---------------------------gps-----------------------------------
+
+//---------------------------wifi----------------------------------
+
+WIFI_DATA_STATUS wifi_data_status_flag = WIFI_DATA_STATUS_NONE;
+
+unsigned int WIFI_mac_all_num=0;
+
+unsigned char WIFI_mac1[7]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};//WIFI_mac1[0] : 信号强度，正数，大于零 数值越小，信号越强。
+unsigned char WIFI_mac2[7]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+unsigned char WIFI_mac3[7]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+unsigned char WIFI_mac4[7]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+
+//a 起始指针  num 字符串长度  b输出
+unsigned char WIFI_process_one(unsigned char *a,unsigned int num,unsigned char *b)
+{
+	//unsigned char wifi_temp2[]="4,\"PG-WIFI-1\",-57,\"50:bd:5f:12:94:46\",1,-34)";
+
+	unsigned int i=0,j=num;
+	unsigned char *zhen;
+	zhen=a;
+
+	while(j--)
+	{
+		if(zhen[i]==',')
+		{
+			i++;
+			while(j--)
+			{
+				if(zhen[i]==',')
+				{
+					if(zhen[i+5]==',')//信号强度 负数  三位数
+					{
+						b[0]= (zhen[i+2]-0x30)*100+(zhen[i+3]-0x30)*10+(zhen[i+4]-0x30);
+						
+						//------------------------------------------------------------
+						if(zhen[i+7]>=97) b[1]= (zhen[i+7]-'a'+0x0a);//////////////////b[1] zhen[i+7] zhen[i+8]
+						else b[1]= (zhen[i+7]-0x30);
+						b[1]<<=4;
+						if(zhen[i+8]>=97) b[1] |= (zhen[i+8]-'a'+0x0a);
+						else b[1]|=(zhen[i+8]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+10]>=97) b[2]= (zhen[i+10]-'a'+0x0a);//////////////////b[2] zhen[i+10] zhen[i+11]
+						else b[2]= (zhen[i+10]-0x30);
+						b[2]<<=4;
+						if(zhen[i+11]>=97) b[2] |= (zhen[i+11]-'a'+0x0a);
+						else b[2] |= (zhen[i+11]-0x30);			
+						//------------------------------------------------------------
+						if(zhen[i+13]>=97) b[3]= (zhen[i+13]-'a'+0x0a);//////////////////b[3] zhen[i+13] zhen[i+14]
+						else b[3]= (zhen[i+13]-0x30);
+						b[3]<<=4;
+						if(zhen[i+14]>=97) b[3] |= (zhen[i+14]-'a'+0x0a);
+						else b[3] |= (zhen[i+14]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+16]>=97) b[4]= (zhen[i+16]-'a'+0x0a);//////////////////b[4] zhen[i+16] zhen[i+17]
+						else b[4]= (zhen[i+16]-0x30);
+						b[4]<<=4;
+						if(zhen[i+17]>=97) b[4] |= (zhen[i+17]-'a'+0x0a);
+						else b[4] |= (zhen[i+17]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+19]>=97) b[5]= (zhen[i+19]-'a'+0x0a);//////////////////b[5] zhen[i+19] zhen[i+20]
+						else b[5]= (zhen[i+19]-0x30);
+						b[5]<<=4;
+						if(zhen[i+20]>=97) b[5] |= (zhen[i+20]-'a'+0x0a);
+						else b[5] |= (zhen[i+20]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+22]>=97) b[6]= (zhen[i+22]-'a'+0x0a);//////////////////b[6] zhen[i+22] zhen[i+23]
+						else b[6]= (zhen[i+22]-0x30);
+						b[6]<<=4;
+						if(zhen[i+23]>=97) b[6] |= (zhen[i+23]-'a'+0x0a);
+						else b[6] |= (zhen[i+23]-0x30);
+						//------------------------------------------------------------
+					
+						return 1;
+						
+					}
+					else if(zhen[i+4] == ',')//信号强度 负数  两位数
+					{
+						b[0]= (zhen[i+2]-0x30)*10+(zhen[i+3]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+6]>=97) b[1]= (zhen[i+6]-'a'+0x0a);//////////////////b[1] zhen[i+6] zhen[i+7]
+						else b[1]= (zhen[i+6]-0x30);
+						b[1]<<=4;
+						if(zhen[i+7]>=97) b[1] |= (zhen[i+7]-'a'+0x0a);
+						else b[1] |= (zhen[i+7]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+9]>=97) b[2]= (zhen[i+9]-'a'+0x0a);//////////////////b[2] zhen[i+9] zhen[i+10]
+						else b[2]= (zhen[i+9]-0x30);
+						b[2]<<=4;
+						if(zhen[i+10]>=97) b[2] |= (zhen[i+10]-'a'+0x0a);
+						else b[2] |= (zhen[i+10]-0x30);			
+						//------------------------------------------------------------
+						if(zhen[i+12]>=97) b[3]= (zhen[i+12]-'a'+0x0a);//////////////////b[3] zhen[i+12] zhen[i+13]
+						else b[3]= (zhen[i+12]-0x30);
+						b[3]<<=4;
+						if(zhen[i+13]>=97) b[3] |= (zhen[i+13]-'a'+0x0a);
+						else b[3] |= (zhen[i+13]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+15]>=97) b[4]= (zhen[i+15]-'a'+0x0a);/////////////////b[4] zhen[i+15] zhen[i+16]
+						else b[4]= (zhen[i+15]-0x30);
+						b[4]<<=4;
+						if(zhen[i+16]>=97) b[4] |= (zhen[i+16]-'a'+0x0a);
+						else b[4] |= (zhen[i+16]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+18]>=97) b[5]= (zhen[i+18]-'a'+0x0a);//////////////////b[5] zhen[i+18] zhen[i+19]
+						else b[5]= (zhen[i+18]-0x30);
+						b[5]<<=4;
+						if(zhen[i+19]>=97) b[5] |= (zhen[i+19]-'a'+0x0a);
+						else b[5] |= (zhen[i+19]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+21]>=97) b[6]= (zhen[i+21]-'a'+0x0a);//////////////////b[6] zhen[i+21] zhen[i+22]
+						else b[6]= (zhen[i+21]-0x30);
+						b[6]<<=4;
+						if(zhen[i+22]>=97) b[6] |= (zhen[i+22]-'a'+0x0a);
+						else b[6] |= (zhen[i+22]-0x30);
+						//------------------------------------------------------------
+
+
+						
+						return 1;
+					}
+					else if(zhen[i+3]==',')//信号强度 负数 一位数
+					{
+						b[0]= zhen[i+2]-0x30;
+						
+						//------------------------------------------------------------
+						if(zhen[i+5]>=97) b[1]= (zhen[i+5]-'a'+0x0a);//////////////////b[1] zhen[i+5] zhen[i+6]
+						else b[1]= (zhen[i+5]-0x30);
+						b[1]<<=4;
+						if(zhen[i+6]>=97) b[1] |= (zhen[i+6]-'a'+0x0a);
+						else b[1] |= (zhen[i+6]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+8]>=97) b[2]= (zhen[i+8]-'a'+0x0a);//////////////////b[2] zhen[i+8] zhen[i+9]
+						else b[2]= (zhen[i+8]-0x30);
+						b[2]<<=4;
+						if(zhen[i+9]>=97) b[2] |= (zhen[i+9]-'a'+0x0a);
+						else b[2] |= (zhen[i+9]-0x30);			
+						//------------------------------------------------------------
+						if(zhen[i+11]>=97) b[3]= (zhen[i+11]-'a'+0x0a);//////////////////b[3] zhen[i+11] zhen[i+12]
+						else b[3]= (zhen[i+11]-0x30);
+						b[3]<<=4;
+						if(zhen[i+12]>=97) b[3] |= (zhen[i+12]-'a'+0x0a);
+						else b[3] |= (zhen[i+12]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+14]>=97) b[4]= (zhen[i+14]-'a'+0x0a);//////////////////b[4] zhen[i+14] zhen[i+15]
+						else b[4]= (zhen[i+14]-0x30);
+						b[4]<<=4;
+						if(zhen[i+15]>=97) b[4] |= (zhen[i+15]-'a'+0x0a);
+						else b[4] |= (zhen[i+15]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+17]>=97) b[5]= (zhen[i+17]-'a'+0x0a);//////////////////b[5] zhen[i+17] zhen[i+18]
+						else b[5]= (zhen[i+17]-0x30);
+						b[5]<<=4;
+						if(zhen[i+18]>=97) b[5] |= (zhen[i+18]-'a'+0x0a);
+						else b[5] |= (zhen[i+18]-0x30);
+						//------------------------------------------------------------
+						if(zhen[i+20]>=97) b[6]= (zhen[i+20]-'a'+0x0a);//////////////////b[6] zhen[i+20] zhen[i+21]
+						else b[6]= (zhen[i+20]-0x30);
+						b[6]<<=4;
+						if(zhen[i+21]>=97) b[6] |= (zhen[i+21]-'a'+0x0a);
+						else b[6] |= (zhen[i+21]-0x30);
+						//------------------------------------------------------------
+
+						
+						return 1;
+					}
+					else return 0;
+					
+				}
+				else
+				{
+					i++;
+				}
+			}
+		}
+		else
+		{
+			i++;
+		}
+	}
+	return 0;
+}
+
+void WIFI_all_process(unsigned char *bufff,unsigned int changdu)
+{
+	
+			unsigned int len=changdu;
+			unsigned int i=0;
+			unsigned char * p;
+			
+			p=bufff;
+	
+			while(i<len)
+			{
+				if(strncmp((char*)p,"+CWLAP:(",8)==0)
+				{
+					unsigned int j=0;
+					unsigned char *q;
+					unsigned char kkk=0;
+	
+					p+=8;
+					i+=8;
+					q=p;
+	
+					while(i<len)
+					{
+						if(p[0]=='\"')
+						{
+							kkk++;
+							if(kkk==4)
+							{
+								WIFI_process_one(q,j+1,WIFI_mac4);
+	
+								{
+									WIFI_mac_all_num++;
+									
+									if(WIFI_mac4[0] < WIFI_mac3[0])
+									{
+										unsigned char wifi_i;
+										unsigned char temppp[7];
+										for(wifi_i=0;wifi_i<7;wifi_i++)
+										{
+											temppp[wifi_i]=WIFI_mac4[wifi_i];
+											WIFI_mac4[wifi_i]=WIFI_mac3[wifi_i];
+											WIFI_mac3[wifi_i]=temppp[wifi_i];
+										}
+									}//1
+	
+									if(WIFI_mac3[0] < WIFI_mac2[0])
+									{
+										unsigned char wifi_i;
+										unsigned char temppp[7];
+										for(wifi_i=0;wifi_i<7;wifi_i++)
+										{
+											temppp[wifi_i]=WIFI_mac3[wifi_i];
+											WIFI_mac3[wifi_i]=WIFI_mac2[wifi_i];
+											WIFI_mac2[wifi_i]=temppp[wifi_i];
+										}
+									}//2
+	
+									if(WIFI_mac2[0] < WIFI_mac1[0])
+									{
+										unsigned char wifi_i;
+										unsigned char temppp[7];
+										for(wifi_i=0;wifi_i<7;wifi_i++)
+										{
+											temppp[wifi_i]=WIFI_mac2[wifi_i];
+											WIFI_mac2[wifi_i]=WIFI_mac1[wifi_i];
+											WIFI_mac1[wifi_i]=temppp[wifi_i];
+										}
+									}//3
+	
+									if(WIFI_mac4[0] < WIFI_mac3[0])
+									{
+										unsigned char wifi_i;
+										unsigned char temppp[7];
+										for(wifi_i=0;wifi_i<7;wifi_i++)
+										{
+											temppp[wifi_i]=WIFI_mac4[wifi_i];
+											WIFI_mac4[wifi_i]=WIFI_mac3[wifi_i];
+											WIFI_mac3[wifi_i]=temppp[wifi_i];
+										}
+									}
+	
+									if(WIFI_mac3[0] < WIFI_mac2[0])
+									{
+										unsigned char wifi_i;
+										unsigned char temppp[7];
+										for(wifi_i=0;wifi_i<7;wifi_i++)
+										{
+											temppp[wifi_i]=WIFI_mac3[wifi_i];
+											WIFI_mac3[wifi_i]=WIFI_mac2[wifi_i];
+											WIFI_mac2[wifi_i]=temppp[wifi_i];
+										}
+									}
+	
+									if(WIFI_mac4[0] < WIFI_mac3[0])
+									{
+										unsigned char wifi_i;
+										unsigned char temppp[7];
+										for(wifi_i=0;wifi_i<7;wifi_i++)
+										{
+											temppp[wifi_i]=WIFI_mac4[wifi_i];
+											WIFI_mac4[wifi_i]=WIFI_mac3[wifi_i];
+											WIFI_mac3[wifi_i]=temppp[wifi_i];
+										}
+									}
+	
+								}
+								p++;
+								i++;
+								break;
+							}
+							else
+							{
+								p++;
+								i++;
+								j++;
+	
+							}
+						}
+						else
+						{
+							p++;
+							i++;
+							j++;
+						}
+					}
+										 
+				}
+				else 
+				{
+					p++;
+					i++;
+				}
+			}
+	
+			//kal_printf("mofan: %d (%2x%2x%2x%2x%2x%2x)	\n", WIFI_mac1[0],WIFI_mac1[1], WIFI_mac1[2], WIFI_mac1[3], WIFI_mac1[4], WIFI_mac1[5], WIFI_mac1[6] );
+			//kal_printf("mofan: %d (%2x%2x%2x%2x%2x%2x)	\n", WIFI_mac2[0],WIFI_mac2[1], WIFI_mac2[2], WIFI_mac2[3], WIFI_mac2[4], WIFI_mac2[5], WIFI_mac2[6] );
+			//kal_printf("mofan: %d (%2x%2x%2x%2x%2x%2x)	\n", WIFI_mac3[0],WIFI_mac3[1], WIFI_mac3[2], WIFI_mac3[3], WIFI_mac3[4], WIFI_mac3[5], WIFI_mac3[6] );
+	
+}
+
+void wifi_power_on(void)
+{
+	//GPIO_ModeSetup(5,0);
+	//GPIO_InitIO(1,5);//gpio4 out
+	//GPIO_WriteIO(1,5);//gpio4  high
+#ifndef  WIN32
+	//VMC_ON();
+	VIBR_ON();
+#endif
+
+}
+
+void wifi_power_off(void)
+{
+	//GPIO_ModeSetup(5,0);
+	//GPIO_InitIO(1,5);//gpio4 out
+	//GPIO_WriteIO(0,5);//gpio4  0
+#ifndef  WIN32
+	//VMC_OFF();
+	VIBR_OFF();
+#endif
+
+}
+
+void WIFI_start_step1(void);
+void WIFI_start_step2(void);
+void WIFI_start_step3(void);
+
+void WIFI_start(void)
+{
+	unsigned char i;
+	for(i=0;i<7;i++)
+	{
+		WIFI_mac1[i]=0xff;
+		WIFI_mac2[i]=0xff;
+		WIFI_mac3[i]=0xff;
+		WIFI_mac4[i]=0xff;
+	}
+
+	wifi_power_on();
+	
+	//串口进 WIFI 处理
+	uart_function_flag = UART_FUNCTION_WIFI;
+	
+	WIFI_mac_all_num=0;
+	
+	wifi_data_status_flag = WIFI_DATA_STATUS_NONE;
+	
+	StartTimer(WIFI_TIMER,2000,WIFI_start_step1);//
+
+}
+
+void WIFI_start_step1(void)
+{
+	StopTimer(WIFI_TIMER);	
+	
+	if( uart_status_flag == UART_STATUS_ON );
+	else Uart2_open(UART_BAUD_115200);
+
+	uart_status_flag = UART_STATUS_ON;
+	Uart2_sends("AT+RST\r\n",8);
+	
+	StartTimer(WIFI_TIMER,500,WIFI_start_step2);//
+	
+}
+void WIFI_start_step2(void)
+{
+	StopTimer(WIFI_TIMER);
+	
+	Uart2_sends("AT+CWMODE=1\r\n",13);
+	
+	StartTimer(WIFI_TIMER,500,WIFI_start_step3);//	
+}
+void WIFI_start_step3(void)
+{
+	StopTimer(WIFI_TIMER);	
+	Uart2_sends("AT+CWLAP\r\n",10);
+}
+
+void WIFI_end(void)
+{
+	unsigned char i;
+	for(i=0;i<7;i++)
+	{
+		WIFI_mac1[i]=0xff;
+		WIFI_mac2[i]=0xff;
+		WIFI_mac3[i]=0xff;
+		WIFI_mac4[i]=0xff;
+	}
+
+	wifi_power_off();
+
+	kal_prompt_trace(MOD_YXAPP,"WIFI_end: uart_status_flag:%d\n", uart_status_flag);
+	if( uart_status_flag == UART_STATUS_ON )
+	{
+		Uart2_close();
+	}
+	
+	uart_status_flag = UART_STATUS_OFF;
+	
+	uart_function_flag = UART_FUNCTION_NONE;
+	
+	WIFI_mac_all_num = 0 ;
+	
+	wifi_data_status_flag = WIFI_DATA_STATUS_NONE;
+	
+}
+
+WIFI_DATA_STATUS WIFI_get_status(void)
+{
+	return wifi_data_status_flag;
+}
+
+void WIFI_data_ready(void)
+{
+	wifi_data_status_flag = WIFI_DATA_STATUS_OK;
+}
+
+//---------------------------wifi----------------------------------
+
+//---------------------------ble-----------------------------------
+
+void ble_power_on(void)
+{
+	//GPIO_ModeSetup(6,0);
+	//GPIO_InitIO(1,6);//gpio4 out
+	//GPIO_WriteIO(1,6);//gpio4  high
+	
+#ifndef  WIN32
+	VCAMA_ON();
+#endif
+
+}
+
+void ble_power_off(void)
+{
+	//GPIO_ModeSetup(6,0);
+	//GPIO_InitIO(1,6);//gpio4 out
+	//GPIO_WriteIO(0,6);//gpio4  0
+
+#ifndef  WIN32
+	VCAMA_OFF();
+#endif
+
+}
+
+//---------------------------ble-----------------------------------
+
+//---------------------------lbs-----------------------------------
+
+LBS_DATA_STATUS lbs_data_status_flag = LBS_DATA_STATUS_NONE;
+
+unsigned char lbs_value[6][9]={0};//MCC 两个字节 MNC两个字节 LAC 两个字节 CID两个字节  信号强度 一个字节    一共6组
+
+void lbs_start(void)
+{
+	// 5秒一个周期 采集基站定位数据 周期可以改  在头文件里面的宏   YXAPP_LBS_TIMER_OUT
+	// 待机睡眠状态，开基站定可能会导致重启
+
+	lbs_data_status_flag = LBS_DATA_STATUS_NONE;
+	
+	YxAppCellRegReq();
+}
+
+LBS_DATA_STATUS lbs_get_data_status_flag(void)
+{
+	return lbs_data_status_flag;
+}
+
+/*
+MCC，Mobile Country Code，移动国家代码（中国的为460）；
+
+MNC，Mobile Network Code，移动网络号码（中国移动为00，中国联通为01）；
+
+LAC，Location Area Code，位置区域码；
+
+CID，Cell Identity，基站编号，是个16位的数据（范围是0到65535）。
+*/
+void lbs_get_value(void)
+{
+	unsigned char i=0;
+	unsigned int j=0;
+	YXLOGPARAM        *logParam = NULL;
+	yxapp_cell_info_struct *cellIfr = NULL;
+	//unsigned char temp[1000]={0};
+	//char *tempStr=temp;
+	unsigned char log_temp[100]={0};
+
+	for(i=0;i<6;i++)
+		for(j=0;j<9;j++)
+			lbs_value[i][j]=0xff;
+		
+	i=0;
+	j=0;
+	
+#if UART_LOG
+	Uart1_sends("lbs start\r\n",strlen("lbs start\r\n"));	
+#endif		
+
+	while(i<YX_APP_MAX_CELL_INFOR_NUM)
+	{
+		cellIfr = YxAppLbsGetData((char)i);
+		if(cellIfr)
+		{
+#if 0
+			if(YxAppLbsGetData((char)(i+1)))
+				sprintf(tempStr,"MCC:%d,MNC:%d,LAC:%d,CELLID:%d,RF:%d|",cellIfr->mcc,cellIfr->mnc,cellIfr->lac,cellIfr->ci,-1*cellIfr->rxlev);
+			else
+				sprintf(tempStr,"MCC:%d,MNC:%d,LAC:%d,CELLID:%d,RF:%d",cellIfr->mcc,cellIfr->mnc,cellIfr->lac,cellIfr->ci,-1*cellIfr->rxlev);		
+			j = (U16)strlen(tempStr);
+			tempStr += j;
+#endif
+			lbs_value[i][0] = ( cellIfr->mcc>>8 );
+			lbs_value[i][1] =   cellIfr->mcc&0xff;
+			
+			lbs_value[i][2] = ( cellIfr->mnc>>8  );
+			lbs_value[i][3] =   cellIfr->mnc&0xff;
+			
+			lbs_value[i][4] = ( cellIfr->lac>>8  );
+			lbs_value[i][5] =   cellIfr->lac&0xff;
+			
+			lbs_value[i][6] = ( cellIfr->ci>>8  );
+			lbs_value[i][7] =   cellIfr->ci&0xff;
+			
+			lbs_value[i][8] = cellIfr->rxlev;
+			
+#if UART_LOG
+			sprintf(log_temp,"%d MCC:%d,MNC:%d,LAC:%d,CELLID:%d,RF:%d \r\n",i+1,cellIfr->mcc,cellIfr->mnc,cellIfr->lac,cellIfr->ci,-1*cellIfr->rxlev);		
+			Uart1_sends(log_temp,strlen(log_temp));
+#endif
+
+		}
+		else
+			break;
+		i++;
+	}
+	
+#if UART_LOG		
+	Uart1_sends("lbs end\r\n",strlen("lbs end\r\n"));
+#endif
+
+	lbs_data_status_flag = LBS_DATA_STATUS_OK;
+}
+
+//---------------------------lbs-----------------------------------
+
+//---------------------------POWER---------------------------------
+
+#ifndef  WIN32
+#define DRV_SetData(addr, bitmask, value)     {\
+   kal_uint16 temp;\
+   temp = (~(bitmask)) & DRV_Reg(addr);\
+   temp |= ((value) & (bitmask));\
+   DRV_WriteReg(addr,temp);\
+}
+#define DRV_WriteReg(addr,data)     ((*(volatile kal_uint16 *)(addr)) = (kal_uint16)(data))
+
+void power_manage_ini(void)
+{
+
+	//VSIM2  stm8 加速度计  红外 供电LDO
+	VSIM2_OFF();
+
+	//VCAMA  蓝牙
+	VCAMA_OFF();
+
+	//屏幕
+	//VUSB_OFF();
+
+	//wifi
+	VMC_OFF();
+
+	//gps
+	VIBR_OFF();
+}
+
+void VSIM2_ON(void)
+{
+	DRV_SetData(0xA0700190,0x411,0x411);//设置VSIM2 3.0V
+	DRV_SetData(0xA0700198,0x002,0x002);
+}
+
+void VSIM2_OFF(void)
+{
+	DRV_SetData(0xA0700190,0x411,0x0);//设置VSIM2 3.0V
+	DRV_SetData(0xA0700198,0x002,0x002);
+
+}
+
+void VCAMA_ON(void)
+{
+	DRV_SetData(0xA0700130,0x403,0x403);//
+}
+
+void VCAMA_OFF(void)
+{
+	DRV_SetData(0xA0700130,0x403,0x2);//
+}
+
+void VUSB_ON(void)
+{
+
+}
+
+void VUSB_OFF(void)
+{
+
+}
+
+//---------------------------POWER---------------------------------
+#endif
+
+//---------------------------CALL----------------------------------
+
+//拨入电话流程  CALL_incoming --- CALL_in --- CALL_end
+//拨出电话流程  CALL_out --- CALL_in --- CALL_end
+//CALL_incoming  函数加到了YxAppCallNumberIsAllowed中，允许接通后 执行
+//CALL_in 函数加到了 mmi_ucm_entry_in_call的开始
+//CALL_end 函数加到了 mmi_ucm_entry_call_end的最后
+//CALL_out  加到需要打电话的地方
+//CALL_get_call_in_allow_connect_flag 加到mmi_ucm_incoming_call_sendkey(); 标志位允许 才之后后面这个函数
+//CALL_get_call_out_allow_disconnect 加到mmi_ucm_outgoing_call_endkey();  标志位允许 才之后后面这个函数
+//CALL_check_listen 加到srv_speech_enable_hand_free上  监听模式 narmol  正常模式  handfree
+
+CALL_IN_STATUS call_in_status_flag = CALL_IN_STATUS_END;
+CALL_OUT_STATUS call_out_status_flag = CALL_OUT_STATUS_END;
+CALL_IN_ALLOW_CONNECT call_in_allow_connect_flag = CALL_IN_ALLOW_CONNECT_UNALLOWED;
+CALL_OUT_ALLOW_DISCONNECT call_out_allow_disconnect = CALL_OUT_ALLOW_DISCONNECT_UNALLOWED;
+
+void CALL_incoming(void)
+{
+	//	电话接入 未接通
+	//  函数加到了YxAppCallNumberIsAllowed中，允许接通后 执行
+	 
+	//切换屏幕到电话接入状态
+	lcd_ui_status_flag = LCD_UI_STATUS_DAD;
+	
+	//处于接通状态
+	call_in_status_flag = CALL_IN_STATUS_INCOMING;
+
+	srv_gpio_setting_set_bl_time(SRV_GPIO_BACKLIGHT_PERMANENT_ON_TIME);
+	//屏幕一直亮
+	
+}
+
+void CALL_in(void)
+{
+	// 电话已经接入 正在通话
+	
+	call_in_status_flag = CALL_IN_STATUS_IN;
+}
+
+void CALL_out(void)
+{
+	//需要拨打电话的时候调用
+	YxAppMakeCall(0,"13530514107");
+	
+	call_out_status_flag = CALL_OUT_STATUS_START;
+	
+	srv_gpio_setting_set_bl_time(SRV_GPIO_BACKLIGHT_PERMANENT_ON_TIME);
+}
+
+void CALL_end(void)
+{
+	//电话事件 结束
+	srv_gpio_setting_set_bl_time(10);
+	
+	call_in_status_flag = CALL_IN_STATUS_END;
+	call_out_status_flag = CALL_OUT_STATUS_END;
+	call_in_allow_connect_flag = CALL_IN_ALLOW_CONNECT_UNALLOWED;
+	call_out_allow_disconnect = CALL_OUT_ALLOW_DISCONNECT_UNALLOWED;
+
+	CALL_listen_off();
+	
+}
+
+void CALL_incoming_connect(void)
+{
+	//来电接通
+	call_in_allow_connect_flag = CALL_IN_ALLOW_CONNECT_ALLOWED;
+	mmi_ucm_incoming_call_sendkey();
+}
+
+void CALL_incoming_disconnect(void)
+{
+	//来电未接通 在响铃 直接挂断
+	
+	mmi_ucm_incoming_call_endkey();
+}
+
+void CALL_in_disconnect(void)
+{
+	//来电已经接通 通话中挂断 
+	mmi_ucm_in_call_endkey();
+}
+
+void CALL_outgoing_disconnect(void)
+{
+	//挂断拨出的电话
+	
+	call_out_allow_disconnect = CALL_OUT_ALLOW_DISCONNECT_ALLOWED;
+	mmi_ucm_outgoing_call_endkey();
+}
+
+CALL_IN_STATUS CALL_get_call_in_status_flag(void)
+{
+	return call_in_status_flag;
+}
+
+CALL_OUT_STATUS CALL_get_call_out_status_flag(void)
+{
+	return call_out_status_flag;
+}
+
+CALL_IN_ALLOW_CONNECT CALL_get_call_in_allow_connect_flag(void)
+{
+	return call_in_allow_connect_flag;
+}
+
+CALL_OUT_ALLOW_DISCONNECT CALL_get_call_out_allow_disconnect(void)
+{
+	return call_out_allow_disconnect;
+}
+
+CALL_LISTEN_STATUS call_listen_status_flag = CALL_LISTEN_STATUS_OFF;
+
+//监听模式    
+void CALL_listen_on(void)
+{	
+	call_listen_status_flag = CALL_LISTEN_STATUS_ON;	
+}
+
+//正常模式
+void CALL_listen_off(void)
+{	
+	call_listen_status_flag = CALL_LISTEN_STATUS_OFF;	
+}
+
+CALL_LISTEN_STATUS CALL_check_listen(void)
+{
+	return call_listen_status_flag;
+}
+
+void CALL_listen_start(void)
+{
+	CALL_listen_on();
+	CALL_out();//电话拨出
+	
+}
+
+//---------------------------CALL----------------------------------
+
+//---------------------------远程关机------------------------------
+
+void Shutdown_cmd(void)
+{
+	YxAppShutdownTimer();
+}
+
+//---------------------------远程关机------------------------------
+
+//---------------------------找手表--------------------------------
+
+SEARCH_WATCH_STATUS search_watch_status_flag = SEARCH_WATCH_STATUS_END;
+
+void play_music(void)
+{
+	U8 audio_type;
+	U32 audio_len;
+	U8 *audio_data;
+	audio_data = get_audio(AUD_ID_PROF_TONE1, &audio_type, &audio_len);
+	mdi_audio_play_string_with_vol_path((void*)audio_data, audio_len, audio_type, DEVICE_AUDIO_PLAY_INFINITE, NULL,NULL, MDI_AUD_VOL_6, MDI_DEVICE_SPEAKER );
+}
+
+void stop_music(void)
+{
+	mdi_audio_stop_string();
+}
+
+void start_search_watch(void)
+{
+	play_music();
+	search_watch_status_flag = SEARCH_WATCH_STATUS_START;
+}
+
+void stop_search_watch(void)
+{
+	stop_music();
+	search_watch_status_flag = SEARCH_WATCH_STATUS_END;
+}
+
+/* ** **** ********  ****************  ALARM  ****************  ******** **** ** */
+
+void playClockAlarm(void) {	
+	U8 audio_type;
+	U32 audio_len;
+	U8 *audio_data;
+	audio_data = get_audio(AUD_ID_PROF_TONE1, &audio_type, &audio_len);
+	mdi_audio_play_string_with_vol_path((void*)audio_data, audio_len, audio_type, DEVICE_AUDIO_PLAY_INFINITE, NULL,NULL, MDI_AUD_VOL_6, MDI_DEVICE_SPEAKER );
+}
+
+void playSafeZoneAlarm(void) {
+	U8 audio_type;
+	U32 audio_len;
+	U8 *audio_data;
+	audio_data = get_audio(AUD_ID_PROF_TONE2, &audio_type, &audio_len);
+	mdi_audio_play_string_with_vol_path((void*)audio_data, audio_len, audio_type, DEVICE_AUDIO_PLAY_INFINITE, NULL,NULL, MDI_AUD_VOL_6, MDI_DEVICE_SPEAKER );
+}
+
+void playLongSatAlarm(void) {
+	U8 audio_type;
+	U32 audio_len;
+	U8 *audio_data;
+	audio_data = get_audio(AUD_ID_PROF_TONE3, &audio_type, &audio_len);
+	mdi_audio_play_string_with_vol_path((void*)audio_data, audio_len, audio_type, DEVICE_AUDIO_PLAY_INFINITE, NULL,NULL, MDI_AUD_VOL_6, MDI_DEVICE_SPEAKER );
+}
+
+void playLowPowerAlarm(void) {
+	U8 audio_type;
+	U32 audio_len;
+	U8 *audio_data;
+	audio_data = get_audio(AUD_ID_PROF_TONE4, &audio_type, &audio_len);
+	mdi_audio_play_string_with_vol_path((void*)audio_data, audio_len, audio_type, DEVICE_AUDIO_PLAY_INFINITE, NULL,NULL, MDI_AUD_VOL_6, MDI_DEVICE_SPEAKER );
+}
+
+
+
+//---------------------------找手表--------------------------------
+
+//---------------------------查话费--------------------------------
+
+unsigned char iphone_number_for_sms[20];
+
+void YxAppSmsSendGetMoney(void)
+{
+	char *numberk = "10086";
+	U16  content[5];
+	if(YxAppGetSimOperator(YX_APP_SIM1)==MSIM_OPR_UNICOM)
+	{
+		content[0] = 'C';
+		content[1] = 'X';
+		content[2] = 'H';
+		content[3] = 'F';
+		content[4] = 0;
+		numberk = "10010";
+	}
+	else
+	{
+		content[0] = 'Y';
+		content[1] = 'E';
+		content[2] = 0;
+		content[3] = 0;
+		content[4] = 0;
+	}
+	YxAppSendSms(numberk, content,1);
+}
+
+void SmsSend_to_phone(U16 *p)
+{
+	YxAppSendSmsIntenal(iphone_number_for_sms,1,p);
+}
+
+//查话费 输入手机号  话费信息发送到指定手机号上  
+void Telephone_Bill_Enquiry(unsigned char *phone_num)
+{
+	unsigned char *p = phone_num;
+	unsigned char i=0,j;
+
+	for(j=0;j<20;j++)
+		iphone_number_for_sms[j] = 0;
+	
+	while(*p!='\0')
+	{
+		iphone_number_for_sms[i]=*p;
+		p++;
+		i++;
+	}
+	iphone_number_for_sms[i] = '\0';
+	
+	YxAppSmsSendGetMoney();
+}
+
+//---------------------------查话费--------------------------------
+
+//---------------------------拒绝陌生人来电------------------------
+
+REFUSED_TO_STRANGER_CALLS_STATUS refused_to_stranger_calls_status_flag = REFUSED_TO_STRANGER_CALLS_STATUS_OFF;
+	
+//拒绝陌生人来电
+void CALL_refused_to_stranger_calls_on(void)
+{
+	refused_to_stranger_calls_status_flag = REFUSED_TO_STRANGER_CALLS_STATUS_ON;
+}
+
+//允许陌生人来电
+void CALL_refused_to_stranger_calls_off(void)
+{
+	refused_to_stranger_calls_status_flag = REFUSED_TO_STRANGER_CALLS_STATUS_OFF;
+}
+
+
+//---------------------------拒绝陌生人来电------------------------
+
+//---------------------------来电自动接听--------------------------
+
+CALL_AUTOMATIC_ANSWERING_STATUS call_automatic_answering_status_flag = CALL_AUTOMATIC_ANSWERING_STATUS_OFF;
+
+//开启自动接听
+void CALL_automatic_answering_status_on(void)
+{
+	call_automatic_answering_status_flag = CALL_AUTOMATIC_ANSWERING_STATUS_ON;
+}
+
+//关闭自动接听
+void CALL_automatic_answering_status_off(void)
+{
+	call_automatic_answering_status_flag = CALL_AUTOMATIC_ANSWERING_STATUS_OFF;
+}
+
+//---------------------------来电自动接听--------------------------
+
+//---------------------------静音模式------------------------------
+
+MUTE_MODE_STATUS mute_mode_status_flag = MUTE_MODE_STATUS_OFF;
+
+void mute_mode_open(void)
+{
+	mute_mode_status_flag = MUTE_MODE_STATUS_ON;
+}
+
+void mute_mode_close(void)
+{
+	mute_mode_status_flag = MUTE_MODE_STATUS_OFF;
+}
+
+MUTE_MODE_STATUS mute_mode_get_status(void)
+{
+	return mute_mode_status_flag;
+}
+
+//---------------------------静音模式------------------------------
+
+//---------------------------I2C-----------------------------------
+
+//flag_Prox_data  0:未脱落  1:脱落   2:I2C故障了
+APDS9901_STATUS flag_Prox_data = APDS9901_STATUS_ERROR;
+
+unsigned short int Prox_data = 0;//Prox_data:距离值     
+
+extern void I2C_ini(void);
+void I2C_initialization(void)
+{
+	I2C_ini();
+}
+
+extern char GsensorI2CSend(kal_uint8 ucDeviceAddr, kal_uint8 reg, kal_uint8* pucData, kal_uint32 unDataLength);
+unsigned char I2C_sends(kal_uint8 ucDeviceAddr, kal_uint8 reg, kal_uint8* pucData, kal_uint32 unDataLength)
+{
+    return GsensorI2CSend( ucDeviceAddr,reg,pucData,unDataLength);
+}
+
+extern char GsensorI2CReceive(kal_uint8 ucDeviceAddr, kal_uint8 reg, kal_uint8* pucData, kal_uint32 unDataLength);
+unsigned char I2C_reads(kal_uint8 ucDeviceAddr, kal_uint8 reg, kal_uint8* pucData, kal_uint32 unDataLength)
+{
+	return GsensorI2CReceive(ucDeviceAddr,reg,  pucData,  unDataLength);
+}
+
+unsigned char I2C_APDS9901_WriteRegData(unsigned char  reg, unsigned char data) 
+{ 
+	return I2C_sends(0x72,0x80 | reg,&data,1);
+}
+
+unsigned char I2C_APDS9901_Read_Word(unsigned char  reg ,unsigned short int *p)
+{ 
+	unsigned char  barr[2]; 
+	unsigned short int temp=0; 
+	unsigned char i2c_error_flag=0;
+	
+	i2c_error_flag = I2C_reads(0x72,0xA0 | reg,barr,2);
+	
+	temp = barr[1];
+	temp<<=8;
+	temp += barr[0];
+	
+	*p = temp;
+	
+	return i2c_error_flag; 
+}
+
+extern void I2C_APDS9901_SEND_MSG(void);
+void I2C_APDS9901_ini(unsigned char step)
+{
+	unsigned char ATIME,PTIME,WTIME,PPCOUNT=8; 
+	unsigned char PDRIVE, PDIODE, PGAIN, AGAIN; 
+	unsigned char WEN, PEN, AEN, PON; 
+	unsigned char i2c_error_flag=0;
+
+	ATIME = 0xff; // 2.7 ms ?minimum ALS integration time 
+	WTIME = 0xff; // 2.7 ms ?minimum Wait time 
+	PTIME = 0xff; // 2.7 ms ?minimum Prox integration time 
+	PPCOUNT = 120; // Minimum prox pulse count 
+
+
+	PDRIVE = 0xC0; //100mA of LED Power 
+	PDIODE = 0x20; // CH1 Diode 
+	PGAIN = 0; //1x Prox gain 
+	AGAIN = 0; //1x ALS gain 
+
+	WEN = 8; // Enable Wait 
+	//WEN = 0; // Enable Wait 
+	
+	PEN = 4; // Enable Prox 
+	AEN = 2; // Enable ALS 
+	PON = 1; // Enable Power On 
+
+	//if(step == 0)
+	{
+		i2c_error_flag = I2C_APDS9901_WriteRegData(0, 0); //Disable and Powerdown 
+
+#if UART_LOG	
+		//if(i2c_error_flag) Uart1_sends("ini_1_Success\r\n",strlen("ini_1_Success\r\n"));
+		//else Uart1_sends("ini_1_error\r\n",strlen("ini_1_error\r\n"));
+#endif
+	}
+
+	//if(step == 1)
+	{
+		i2c_error_flag = I2C_APDS9901_WriteRegData(1, ATIME); 
+
+#if UART_LOG
+		//if(i2c_error_flag) Uart1_sends("ini_2_Success\r\n",strlen("ini_2_Success\r\n"));
+		//else Uart1_sends("ini_2_error\r\n",strlen("ini_2_error\r\n"));
+#endif
+	}
+
+	//if(step == 2)
+	{
+		i2c_error_flag = I2C_APDS9901_WriteRegData(2, PTIME); 
+
+#if UART_LOG	
+		//if(i2c_error_flag) Uart1_sends("ini_3_Success\r\n",strlen("ini_3_Success\r\n"));
+		//else Uart1_sends("ini_3_error\r\n",strlen("ini_3_error\r\n"));
+#endif
+	}
+
+	//if(step == 3)
+	{
+		i2c_error_flag = I2C_APDS9901_WriteRegData(3, WTIME); 
+
+#if UART_LOG	
+		//if(i2c_error_flag) Uart1_sends("ini_4_Success\r\n",strlen("ini_4_Success\r\n"));
+		//else Uart1_sends("ini_4_error\r\n",strlen("ini_4_error\r\n"));
+#endif
+	}
+
+	//if(step == 4)
+	{
+		i2c_error_flag = I2C_APDS9901_WriteRegData(0xe, PPCOUNT); 
+
+#if UART_LOG	
+		//if(i2c_error_flag) Uart1_sends("ini_5_Success\r\n",strlen("ini_5_Success\r\n"));
+		//else Uart1_sends("ini_5_error\r\n",strlen("ini_5_error\r\n"));
+#endif
+	}
+
+	//if(step == 5)
+	{
+		i2c_error_flag = I2C_APDS9901_WriteRegData(0xf, PDRIVE | PDIODE | PGAIN | AGAIN);
+
+#if UART_LOG	
+		//if(i2c_error_flag) Uart1_sends("ini_6_Success\r\n",strlen("ini_6_Success\r\n"));
+		//else Uart1_sends("ini_6_error\r\n",strlen("ini_6_error\r\n"));
+#endif
+	}
+	
+	//if(step == 6)
+	{
+		i2c_error_flag = I2C_APDS9901_WriteRegData(0, WEN | PEN | AEN | PON); //  
+
+#if UART_LOG	
+		//if(i2c_error_flag) Uart1_sends("ini_7_Success\r\n",strlen("ini_7_Success\r\n"));
+		//else Uart1_sends("ini_7_error\r\n",strlen("ini_7_error\r\n"));
+#endif	
+	}
+	
+	//Wait(12); //Wait for 12 ms 
+	//ms_i2c_udelay(12000);
+	
+}
+
+void I2C_APDS9901_read_data(void)
+{
+	unsigned char flag;
+
+	//CH0_data = Read_Word(0x14); 
+	//CH1_data = Read_Word(0x16); 
+	flag = I2C_APDS9901_Read_Word(0x18,&Prox_data);
+
+	if(flag)
+	{
+		if(Prox_data>500)
+		{
+			//带在手上
+			flag_Prox_data = APDS9901_STATUS_NOT_LOOSE;
+			
+#if UART_LOG
+			Uart1_sends("带在手上\r\n",strlen("带在手上\r\n"));
+#endif	
+
+		}
+		else
+		{
+			//脱落了
+			flag_Prox_data = APDS9901_STATUS_LOOSE;
+			
+#if UART_LOG			
+			Uart1_sends("脱落了\r\n",strlen("脱落了\r\n"));
+#endif
+
+		}
+	}
+	else 
+	{
+		flag_Prox_data = APDS9901_STATUS_ERROR;
+		
+#if UART_LOG		
+		Uart1_sends("通信故障\r\n",strlen("通信故障\r\n"));
+#endif
+
+	}
+	
+}
+
+void  I2C_APDS9901_START(void)
+{
+	StartTimer(I2C_TIMER,1000,I2C_APDS9901_TASK1);//继续刷
+}
+
+void I2C_APDS9901_TASK1(void)
+{
+	StopTimer(I2C_TIMER);
+
+#if UART_LOG
+	//Uart1_sends("I2C_APDS9901_TASK1\r\n",strlen("I2C_APDS9901_TASK1\r\n"));
+#endif	
+
+#ifndef  WIN32
+	VSIM2_ON();//打开电源
+#endif	
+	I2C_initialization();
+
+	StartTimer(I2C_TIMER,10,I2C_APDS9901_TASK2);//继续刷
+}
+
+void I2C_APDS9901_TASK2(void)
+{
+	static unsigned char step_apds9901_ini=0;
+	StopTimer(I2C_TIMER);
+
+#if UART_LOG
+		//Uart1_sends("I2C_APDS9901_TASK2\r\n",strlen("I2C_APDS9901_TASK2\r\n"));
+#endif
+
+#if 0
+	I2C_APDS9901_ini(step_apds9901_ini);
+	if( ++step_apds9901_ini >6)
+	{
+		step_apds9901_ini = 0;
+		StartTimer(I2C_TIMER,50,I2C_APDS9901_TASK3);//继续刷
+	}
+	else 
+		StartTimer(I2C_TIMER,50,I2C_APDS9901_TASK2);//继续刷
+#endif
+	I2C_APDS9901_ini(0);
+	StartTimer(I2C_TIMER,10,I2C_APDS9901_TASK3);//继续刷
+
+}
+
+extern void I2C_close(void);
+void I2C_APDS9901_TASK3(void)
+{
+	StopTimer(I2C_TIMER);
+
+#if UART_LOG
+	//Uart1_sends("I2C_APDS9901_TASK3\r\n",strlen("I2C_APDS9901_TASK3\r\n"));
+#endif
+
+	I2C_APDS9901_read_data();
+	
+	I2C_close();//输出0
+
+#ifndef  WIN32
+	VSIM2_OFF();//关闭电源
+#endif
+
+	StartTimer(I2C_TIMER,1000,I2C_APDS9901_TASK1);//继续刷
+
+}
+
+APDS9901_STATUS I2C_APDS9901_GET_STATUS(void)
+{
+	return flag_Prox_data;
+}
+
+//------------------hw i2c-----------------------------------------
+
+unsigned int Step_num=0;
+
+extern void BMA250E_ini(void);
+void BMA250E_initialization(void)
+{
+#ifndef WIN32
+	BMA250E_ini();
+#endif
+}
+
+extern void BMA250_read_xyz(kal_int16 *X, kal_int16 *Y, kal_int16 *Z);
+extern void BMA250_read_flat(unsigned char *p);
+
+void BMA250E_READ_DATA(kal_int16 *X, kal_int16 *Y, kal_int16 *Z, unsigned char *p)
+{
+	unsigned char temp=0;
+	
+	static unsigned char i=0,j=0;
+	
+	BMA250_read_xyz(X,Y,Z);
+	
+	if( hand_screen_status_flag == HAND_SCREEN_STATUS_ON )
+	{
+		BMA250_read_flat(&temp);
+		temp = temp & 0x80; 
+
+		if(temp)
+		{
+			//Uart1_sends("temp = 1",strlen("temp = 1"));		
+
+			flat_status_tep = FLAT_STATUS_ON;
+			
+			j=0;
+			if(++i>5)
+			{
+				i=0;
+				flat_status_new = FLAT_STATUS_ON;//水平状态
+
+				if( flat_status_old == FLAT_STATUS_OFF )
+				{
+					//屏幕亮起来
+#if UART_LOG
+					//Uart1_sends("screen on",strlen("screen on"));		
+#endif
+					//hand_status_flag = HAND_STATUS_CHANGE;
+					YxAppSendMsgToMMIMod(APOLLO_MSG_LED_ON,0,0);
+				} 
+				
+				flat_status_old = flat_status_new;
+			}
+		}
+		else
+		{
+			//Uart1_sends("temp = 0",strlen("temp = 0"));		
+
+			flat_status_tep = FLAT_STATUS_OFF;
+
+			i=0;
+			if(++j>5)
+			{
+				j=0;
+				flat_status_new = FLAT_STATUS_OFF;//倾斜
+
+				if( flat_status_old == FLAT_STATUS_ON )
+				{
+					
+					//屏幕灭
+					
+					//YxAppTurnOffScreen();
+#if UART_LOG						
+					//Uart1_sends("screen off",strlen("screen off"));		
+#endif
+				}
+					
+				flat_status_old = flat_status_new;
+				
+			}
+		}
+	}		
+}
+
+extern void PEDO_InitAlgo(unsigned char v_GRange_u8r);
+void BMA250E_GsensorSampleCb(void *parameter);
+void BMA250E_task_ini(void)
+{
+	BMA250E_initialization();
+
+	
+	yxGsensorParam.timerId = kal_create_timer((kal_char*)"yxsensor timer");
+	yxGsensorParam.sample_period = 9;//15;//250;
+#ifndef WIN32		
+	PEDO_InitAlgo(0);
+#endif
+	kal_cancel_timer(yxGsensorParam.timerId);   
+    kal_set_timer(yxGsensorParam.timerId,(kal_timer_func_ptr)BMA250E_GsensorSampleCb,NULL,yxGsensorParam.sample_period,0);
+}
+
+void BMA250E_GsensorSampleCb(void *parameter)
+{
+#ifndef WIN32
+	extern short PEDO_ProcessAccelarationData(short v_RawAccelX_s16r, short v_RawAccelY_s16r, short v_RawAccelZ_s16r);
+	extern kal_uint32 CTIRQ1_2_Mask_Status(void);
+	extern unsigned long PEDO_GetStepCount(void);
+	kal_uint32 CTIRQ_status = CTIRQ1_2_Mask_Status();
+	if(CTIRQ_status) //all interrupt masked except CTIRQ_1/2
+    {
+        kal_set_timer(yxGsensorParam.timerId,(kal_timer_func_ptr)BMA250E_GsensorSampleCb,NULL,1,0); //wait 1 more tick to execute callback
+        return;
+    }
+	else
+	{
+		kal_int16   x_adc = 0,y_adc = 0,z_adc = 0;
+		unsigned char aaa=0;
+		
+		BMA250E_READ_DATA(&x_adc,&y_adc,&z_adc,&aaa);
+
+		PEDO_ProcessAccelarationData(x_adc, y_adc, z_adc);
+		
+		Step_num = 0 + PEDO_GetStepCount();
+
+		{
+			/*
+			unsigned char logtemp[100];		
+
+			aaa = aaa & 0x80;
+			if(aaa) aaa = 1;
+			else aaa = 0;
+			
+			sprintf(logtemp,"x:%d y: %d z: %d  flat:%d",x_adc,y_adc,z_adc,aaa);
+
+			Uart1_sends(logtemp,strlen(logtemp));
+			*/
+		}
+	
+		kal_set_timer(yxGsensorParam.timerId,(kal_timer_func_ptr)BMA250E_GsensorSampleCb,NULL,yxGsensorParam.sample_period,0);
+		return;
+	}
+#endif
+}
+
+//---------------------------I2C-----------------------------------
+
+
+//---------------------------摇一摇接通----------------------------
+
+typedef enum
+{
+	YAOYIYAO_STATUS_OFF = 0,
+	YAOYIYAO_STATUS_ON
+} YAOYIYAO_STATUS;
+
+YAOYIYAO_STATUS yaoyiyao_status_flag = YAOYIYAO_STATUS_OFF;
+
+void yaoyiyao_ini(void)
+{
+	EINT_ini();//摇一摇   
+}
+
+void yaoyiyao_open(void)
+{
+	yaoyiyao_status_flag = YAOYIYAO_STATUS_ON;
+}
+
+void yaoyiyao_close(void)
+{
+	yaoyiyao_status_flag = YAOYIYAO_STATUS_OFF;
+}
+
+//摇一摇事件发生后  进到这里
+void EINT5_handle(void)
+{
+	if( yaoyiyao_status_flag == YAOYIYAO_STATUS_ON )
+	{
+		if( CALL_get_call_in_status_flag() == CALL_IN_STATUS_INCOMING )
+		{
+			CALL_incoming_connect();
+		
+			//开启了自动接听  已经接通了 就停止接通了
+			if( call_automatic_answering_status_flag == CALL_AUTOMATIC_ANSWERING_STATUS_ON )
+				StopTimer(CALL_TIMER);
+#if UART_LOG
+			Uart1_sends("EINT5_handle",strlen("EINT5_handle"));
+#endif
+		}
+	}
+}
+
+//---------------------------摇一摇接通----------------------------
+
+//---------------------------抬手显示------------------------------
+
+FLAT_STATUS flat_status_new = FLAT_STATUS_ON;
+FLAT_STATUS flat_status_old = FLAT_STATUS_ON;
+FLAT_STATUS flat_status_tep = FLAT_STATUS_ON;
+
+HAND_STATUS hand_status_flag = HAND_STATUS_NO_CHANGE;
+
+HAND_SCREEN_STATUS hand_screen_status_flag = HAND_SCREEN_STATUS_OFF;
+
+unsigned char flag_hand=0;
+
+void hand_mode_check(void);
+void hand_mode_ini(void)
+{
+	//StartTimer(HAND_TIMER,1000,hand_mode_check);//继续刷
+	hand_screen_status_flag = HAND_SCREEN_STATUS_ON;
+}
+
+void hand_mode_open(void)
+{
+	hand_screen_status_flag = HAND_SCREEN_STATUS_ON;
+}
+
+void hand_mode_close(void)
+{
+	hand_screen_status_flag = HAND_SCREEN_STATUS_OFF;
+}
+
+void hand_mode_check(void)
+{
+	//StopTimer(HAND_TIMER);
+	//flag_hand = 1;
+	//if( hand_status_flag == HAND_STATUS_CHANGE )
+	//{
+	//	hand_status_flag = HAND_STATUS_NO_CHANGE;
+	//	srv_gpio_setting_set_bl_time(6);
+	//}
+	//StartTimer(HAND_TIMER,10,hand_mode_check);//继续刷
+}
+
+//---------------------------抬手显示------------------------------
+
+//---------------------------motor---------------------------------
+
+void motor_en(void)
+{
+	GPIO_ModeSetup(7,0);
+	GPIO_InitIO(1,7);//gpio4 out
+	GPIO_WriteIO(1,7);//gpio4  high
+}
+
+void motor_disen(void)
+{
+	GPIO_ModeSetup(7,0);
+	GPIO_InitIO(1,7);//gpio4 out
+	GPIO_WriteIO(0,7);//gpio4  high
+}
+
+//---------------------------motor---------------------------------
+
+U8 u8GpsProgress = 0;
+U8 u8StatusCounter = 0;
+extern U8 LatLongValue[10];
+extern U8 LbsWifiValue[64];
+extern U8 PosType;
+#define WIFI_POSITION_ENABLE	0
+
+void ApolloWifiDataCallback(void) {
+	StopTimer(APOLLO_GPS_START_COUNTER_TIMER);
+	if (++u8StatusCounter >= 4) {
+		u8StatusCounter = 0;
+		PosType &= ~0x04;
+		WIFI_end();
+
+		ApolloUploadGpsProc();
+		return ;
+	}
+	kal_prompt_trace(MOD_YXAPP,"ApolloWifiDataCallback\n");
+	if (WIFI_DATA_STATUS_OK == WIFI_get_status()) {
+		U8 i,j;
+
+		kal_prompt_trace(MOD_YXAPP,"WIFI_get_status\n");
+		for (i = 0;i < 7;i ++) {
+			LbsWifiValue[35+4*i] = WIFI_mac1[i];
+			LbsWifiValue[35+4*i+7] = WIFI_mac2[i];
+			LbsWifiValue[35+4*i+14] = WIFI_mac3[i];
+			LbsWifiValue[35+4*i+21] = WIFI_mac4[i];
+		}
+		PosType |= 0x04;
+		WIFI_end();
+		ApolloUploadGpsProc();
+		u8GpsProgress = 0;
+		return ;
+	}
+	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT, ApolloWifiDataCallback);
+}
+
+void ApolloStartWifi(void) {
+	WIFI_start();
+	u8GpsProgress = 3;
+	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT/5, ApolloWifiDataCallback);
+}
+
+char isOK = 0;
+
+void ApolloLabDataCallback(void) {
+	StopTimer(APOLLO_GPS_START_COUNTER_TIMER);
+	if (++u8StatusCounter >= 4) {
+		u8StatusCounter = 0;
+		PosType &= ~0x02;
+		u8GpsProgress = 0;
+		return ;
+	}
+
+	kal_prompt_trace(MOD_YXAPP,"ApolloLabDataCallback\n");
+	if(LBS_DATA_STATUS_OK == lbs_get_data_status_flag()) {
+		U8 i,j;		
+		lbs_get_value();		
+		PosType |= 0x02;
+
+		kal_prompt_trace(MOD_YXAPP,"lbs_get_data_status_flag\n");
+		LbsWifiValue[0] = lbs_value[0][0];
+		LbsWifiValue[1] = lbs_value[0][1];
+		LbsWifiValue[2] = lbs_value[0][2];
+		LbsWifiValue[3] = lbs_value[0][3];
+		
+		for(i=0;i<6;i++)
+			for(j=4;j<9;j++)
+				LbsWifiValue[i * 5 + j] = lbs_value[i][j];
+		
+		u8StatusCounter = 0;
+		#if WIFI_POSITION_ENABLE
+		ApolloStartWifi();
+		#else
+		ApolloUploadGpsProc();
+		u8GpsProgress = 0;
+		#endif
+		return;
+	}
+	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT/5, ApolloLabDataCallback);
+}
+
+void ApolloStartLab(void) {
+#if 1 
+	lbs_start();
+	u8GpsProgress = 2;
+	kal_prompt_trace(MOD_YXAPP," aaaaaaaaaaaa ApolloStartLab\n");
+	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT / 100, ApolloLabDataCallback);
+#else
+	ApolloStartWifi();
+#endif
+}
+
+void ApolloGPSDataCallback(void) {	
+	StopTimer(APOLLO_GPS_START_COUNTER_TIMER);
+	if (++u8StatusCounter == 32) { // 50s
+		u8StatusCounter = 0;
+		PosType &= ~0x01;
+		
+		gps_end();
+		ApolloStartLab();
+		return ;
+	}
+	kal_prompt_trace(MOD_YXAPP,"ApolloGPSDataCallback\n");
+	if (GPS_DATA_STATUS_OK == gps_get_data_status_flag()) {
+		U8 i = 0;
+		kal_prompt_trace(MOD_YXAPP,"gps_get_data_status_flag\n");
+		
+		for (i = 0;i < 10;i ++) {
+			LatLongValue[i] = JW_value[i];
+		}
+		u8StatusCounter = 0;
+		PosType |= 0x01;
+		
+		gps_end();
+
+		ApolloUploadGpsProc();
+		u8GpsProgress = 0;
+		return ;
+	}
+	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT, ApolloGPSDataCallback);
+}
+
+void ApolloStartGPS(void) {
+	PosType = 0;
+	gps_start();	
+	u8GpsProgress = 1;
+	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT, ApolloGPSDataCallback);
+	
+	StopTimer(APOLLO_GPS_ONOFF_TIMER);
+	ApolloStartLocationTimer(WatchInstance.u8Freq);	
+}
+
+
+static void YxMMIProcMsgHdler(void *msg)
+{
+	U8    *command = (PU8)msg;
+	switch(command[0])
+	{
+	case YX_MSG_START_POS_CTRL:
+	case YX_MSG_MAINAPP_TICK_CTRL:
+		YxAppUploadGpsProc();
+		return;
+#if 0
+	case YX_MSG_GPRS_CTRL:
+		if(command[1]==YX_DATA_GPRS_RECONNECT)
+			YxAppReconnectServer();
+		return;
+#endif
+#ifdef __MMI_BT_SUPPORT__
+	case YX_MSG_BLUETOOTH_CTRL:
+		switch(command[1])
+		{
+		case YX_DATA_BTSETNAME:
+			if(srv_bt_cm_get_power_status()!=SRV_BT_CM_POWER_ON)
+				break;
+			if(srv_bt_cm_set_host_dev_name((U8*)yxDataPool) != SRV_BT_CM_RESULT_SUCCESS)
+				break;
+#if(YX_IS_TEST_VERSION!=0)
+			YxAppTestUartSendData((U8*)yxDataPool,strlen(yxDataPool));
+#endif
+			break;
+		case YX_DATA_BTSEARCH:
+			YxAppBtSearchDev();
+			break;
+		case YX_DATA_BT_ABORT_SEARCH:
+			if(srv_bt_cm_search_abort() == SRV_BT_CM_RESULT_SUCCESS)
+				yxBtInSearching = 0;
+			break;
+		case YX_DATA_BT_POWER_CTRL:
+			{
+				if(command[2]>0)//on
+				{
+					if(srv_bt_cm_get_power_status()==SRV_BT_CM_POWER_OFF)
+						srv_bt_cm_switch_on();
+				}
+				else
+				{
+					if(srv_bt_cm_get_power_status()==SRV_BT_CM_POWER_ON)
+					{
+#if defined(__MMI_A2DP_SUPPORT__)
+						mmi_a2dp_bt_power_off_callback(MMI_TRUE);
+#endif
+						srv_bt_cm_switch_off();
+					}
+				}
+			}
+			break;
+		case YX_DATA_BT_SET_VISIBILITY:
+			if(srv_bt_cm_get_power_status()==SRV_BT_CM_POWER_ON)
+			{
+				srv_bt_cm_visibility_type setToType = (command[2]>0) ? SRV_BT_CM_VISIBILITY_ON : SRV_BT_CM_VISIBILITY_OFF;
+				srv_bt_cm_set_visibility(setToType);
+#if(YX_IS_TEST_VERSION!=0)
+				YxAppTestUartSendData("BT-VIS\r\n",8);
+#endif
+			}
+			break;
+		default:
+			break;
+		}
+		return;
+#endif
+#ifdef __MMI_WLAN_FEATURES__
+	case YX_MSG_WLAN_POWER_CTRL:
+		if(command[1]==0)
+		{
+			YxAppWifiIntenalClose();
+			YxAppStepRunMain(YX_RUNKIND_WIFI);
+#if(YX_IS_TEST_VERSION!=0)
+			YxAppTestUartSendData("WIFICLOSE-OK\r\n",13);
+#endif
+		}
+		else
+		{
+			if(YxAppWifiOpenAndScan()==0)
+				YxAppStepRunMain(YX_RUNKIND_WIFI);
+#if(YX_IS_TEST_VERSION!=0)
+			else
+				YxAppTestUartSendData("WIFIOPEN-OK\r\n",13);
+#endif
+		}		
+		return;
+#endif
+#ifdef __NBR_CELL_INFO__
+	case YX_MSG_LBS_CELL_CTRL:
+		kal_prompt_trace(MOD_YXAPP," aaaaaaaaaaaa YX_MSG_LBS_CELL_CTRL%d\n", command[1]);
+		if(command[1]==YX_DATA_LBS_CANECL)
+			YxAppCellCancelReq();
+		else
+			YxAppCellStartReq();
+		return;
+#endif
+	case YX_MSG_CALL_CTRL:
+		if(command[1]==YX_DATA_MAKE_CALL)
+		{
+			U16   phnum[YX_APP_CALL_NUMBER_MAX_LENGTH+1],i = 0;
+			mmi_ucm_make_call_para_struct  make_call_para;
+			mmi_ucm_init_call_para(&make_call_para);
+			while(yxDataPool[i])
+			{
+				phnum[i] = yxDataPool[i];
+				i++;
+				if(i>=YX_APP_CALL_NUMBER_MAX_LENGTH)
+					break;
+			}
+			phnum[i] = 0;
+			make_call_para.ucs2_num_uri = (U16*)phnum;
+			mmi_ucm_call_launch(0, &make_call_para);
+		}
+		return;
+	case YX_MSG_SMS_CTRL:
+		if(command[1]==YX_DATA_SEND_SMS)
+		{
+			if(command[2]==0)
+				YxAppSendSmsIntenal(yxSmsParam.number,0,yxSmsParam.content);
+			else
+				YxAppSendSmsIntenal(yxSmsParam.number,1,yxSmsParam.content);
+		}
+		return;
+#if 1 //Update By WangBoJing 20150915
+#if 0
+	case APOLLO_UPKEY_EVENT_SINGLE_UP:
+		printf("single up\n");
+		break;
+	case APOLLO_UPKEY_EVENT_SINGLE_DOWN:
+		printf("single down\n");
+		break;
+#endif
+	case APOLLO_MSG_STOP_RECORDER: {	
+		//S8 YxAppConnectToMyServer(void);
+		void ApolloConnectToServer(void) ;
+		printf("repeat up\n");
+		Apollo_audio_recorder_stop();
+		apollo_flag = YxAppGetRunFlag();
+		kal_prompt_trace(MOD_YXAPP,"repeat up : 0x%x\n", apollo_flag);
+		if (apollo_flag == APOLLO_RUNKIND_VOICE_DOWNLOAD) {
+			apollo_flag = APOLLO_RUNKIND_VOICE_UPLOAD;
+			break;
+		} else if (apollo_flag == APOLLO_RUNKIND_HEART_COMPLETE || apollo_flag == YX_RUNKIND_OWNER_HEART) {
+			ApolloAppSetRunFlag(APOLLO_RUNKIND_VOICE_UPLOAD);
+		} else {
+			break;
+		}
+		ApolloAppSetPacketTimes(0);
+		//send to message
+		//YxAppConnectToMyServer();		
+		ApolloConnectToServer();
+		//YxAppStepRunMain(0);
+		}
+		break;
+	case APOLLO_MSG_BLUETOOTH_UPLOAD: {
+		apollo_flag = YxAppGetRunFlag();
+		kal_prompt_trace(MOD_YXAPP,"APOLLO_MSG_BLUETOOTH_UPLOAD : %d\n", u16BlueToothDataIndex);
+		if (apollo_flag == APOLLO_RUNKIND_VOICE_DOWNLOAD) {
+			//apollo_flag = APOLLO_RUNKIND_VOICE_UPLOAD;
+			save_flag = APOLLO_RUNKIND_VOICE_UPLOAD;
+			break;
+		} else if (apollo_flag == YX_RUNKIND_OWNER_GPS) {
+			save_flag = APOLLO_RUNKIND_VOICE_UPLOAD;
+			break;
+		}else if (apollo_flag == APOLLO_RUNKIND_HEART_COMPLETE || apollo_flag == YX_RUNKIND_OWNER_HEART) {
+			ApolloAppSetRunFlag(APOLLO_RUNKIND_VOICE_UPLOAD);
+		} else {
+			break;
+		}
+		ApolloAppSetPacketTimes(0);
+		//send to message
+		//YxAppConnectToMyServer();		
+		ApolloConnectToServer();
+		break;
+	}
+	case APOLLO_MSG_START_RECORDER:
+		kal_prompt_trace(MOD_YXAPP,"repeat down\n");
+		printf("repeat down\n");
+		Apollo_audio_recorder_start();
+		break;
+	case APOLLO_PLAY_RECV_VOICE_DATA:
+		kal_prompt_trace(MOD_YXAPP,"play recv data\n");
+		Apollo_audio_recv_data();
+		break;	
+	case APOLLO_MSG_SERIALPORT_SEND:
+		ApolloBlueToothSendReady();
+		break;
+	case APOLLO_UART1:{
+		//char uart_buffer[32] = {0};
+		//sprintf(uart_buffer, "");
+		//kal_bool yxos_UART_Open(DCL_DEV port, DCL_UINT32 ownerid);
+		
+		//Uart1_sends("uart2_123\r\n",strlen("uart2_123\r\n")); 
+		if( flat_status_tep == FLAT_STATUS_ON )
+			srv_gpio_setting_set_bl_time(6);
+		return;
+	}
+	case APOLLO_UART2:
+		break;
+	case APOLLO_UART3:
+		break;
+	case APOLLO_MSG_COUNT_STEP_SETON: {
+		if (!(u16WatchStatusFlag & FLAG_COUNTSTEP_MODE)) {
+			u16WatchStatusFlag |= FLAG_COUNTSTEP_MODE;
+			WatchInstance.u8StepFlag = 1;
+			ApolloWatchSave();
+			
+			//count step mode open			
+		}
+		break;
+	}
+	case APOLLO_MSG_COUNT_STEP_SETOFF: {
+		if (u16WatchStatusFlag & FLAG_COUNTSTEP_MODE) {
+			u16WatchStatusFlag &= (~FLAG_COUNTSTEP_MODE);
+			WatchInstance.u8StepFlag = 0;
+			ApolloWatchSave();
+			//count step mode close
+			
+		}
+		break;
+	}
+	case APOLLO_MSG_SLEEP_QUALITY_SETON: {
+		if (!(u16WatchStatusFlag & FLAG_SLEEPQUALITY_MODE)) {
+			u16WatchStatusFlag |= FLAG_SLEEPQUALITY_MODE;
+			WatchInstance.u8SleepFlag= 1;
+			ApolloWatchSave();
+			//sleep quality mode open
+			
+		}
+		break;
+	}
+	case APOLLO_MSG_SLEEP_QUALITY_SETOFF: {
+		if (u16WatchStatusFlag & FLAG_SLEEPQUALITY_MODE) {
+			u16WatchStatusFlag &= (~FLAG_SLEEPQUALITY_MODE);
+			WatchInstance.u8SleepFlag= 0;
+			ApolloWatchSave();
+			//sleep quality mode close
+			
+		}
+		break;
+	}
+	case APOLLO_MSG_SOS_MSGREMAINER_OPEN: {
+		if (!(u16WatchStatusFlag & FLAG_SOSMSG_MODE)) {
+			u16WatchStatusFlag |= FLAG_SOSMSG_MODE;
+			WatchInstance.u8SOSMsgFlag = 1;
+			ApolloWatchSave();
+			//SOS Message mode open
+			
+		}
+		break;
+	}
+	case APOLLO_MSG_SOS_MSGREMAINER_CLOSE: {
+		if (u16WatchStatusFlag & FLAG_SOSMSG_MODE) {
+			u16WatchStatusFlag &= (~FLAG_SOSMSG_MODE);
+			WatchInstance.u8SOSMsgFlag = 0;
+			ApolloWatchSave();
+			//SOS Message mode close
+		}
+		break;
+	}
+	case APOLLO_MSG_POWER_MSGREMAINDER_OPEN: {
+		if (!(u16WatchStatusFlag & FLAG_POWERMSG_MODE)) {
+			u16WatchStatusFlag |= FLAG_POWERMSG_MODE;
+			WatchInstance.u8PowerMsgFlag = 1;
+			ApolloWatchSave();
+			//Low Power Message mode open
+			
+		}
+		break;
+	}
+	case APOLLO_MSG_POWER_MSGREMAINDER_CLOSE: {
+		if (u16WatchStatusFlag & FLAG_POWERMSG_MODE) {
+			u16WatchStatusFlag &= (~FLAG_POWERMSG_MODE);
+			WatchInstance.u8PowerMsgFlag = 0;
+			ApolloWatchSave();
+			//Low Power Message mode close
+		}
+		break;
+	}
+	case APOLLO_MSG_ALARMMUSIC_OPEN: {
+		if (!(u16WatchStatusFlag & FLAG_ALARMMUSIC_MODE)) {
+			u16WatchStatusFlag |= FLAG_ALARMMUSIC_MODE;
+			WatchInstance.u8AlarmMusicFlag = 1;
+			ApolloWatchSave();
+			//alarm mode open
+			playLongSatAlarm();
+		}
+		break;
+	}
+	case APOLLO_MSG_ALARMMUSIC_CLOSE: {
+		if (u16WatchStatusFlag & FLAG_ALARMMUSIC_MODE) {
+			u16WatchStatusFlag &= (~FLAG_ALARMMUSIC_MODE);
+			WatchInstance.u8AlarmMusicFlag = 0;
+			ApolloWatchSave();
+			//alarm Message mode close
+			stop_music();
+		}
+		break;
+	}
+	case APOLLO_MSG_SAFEZONEMUSIC_OPEN: {
+		if (!(u16WatchStatusFlag & FLAG_SAFEZONEALARM_MODE)) {
+			u16WatchStatusFlag |= FLAG_SAFEZONEALARM_MODE;
+			WatchInstance.u8SafeZoneMusic = 1;
+			ApolloWatchSave();
+			//SafeZone Message Remaind mode open
+		}
+		break;
+	}
+	case APOLLO_MSG_SAFEZONEMUSIC_CLOSE: {
+		if (u16WatchStatusFlag & FLAG_SAFEZONEALARM_MODE) {
+			u16WatchStatusFlag &= (~FLAG_SAFEZONEALARM_MODE);
+			WatchInstance.u8SafeZoneMusic = 0;
+			ApolloWatchSave();
+			//SafeZone Message Remaind mode close
+		}
+		break;
+	}
+	
+	
+	case APOLLO_MSG_SET_PHONENUMBER: {
+		CHAR fname[6] = {0};
+		fname[0] = command[1];
+		fname[1] = '.';
+		fname[2] = 'd';
+		fname[3] = 'a';
+		fname[4] = 't';
+
+		kal_prompt_trace(MOD_YXAPP," index:%c, phonenumber: %s \n", command[1], (U8*)phonenumber);	
+		writeApolloKey(fname, phonenumber, 15);		
+		
+		break;
+	}
+
+	case APOLLO_MSG_CLOCKALARM: {
+		playClockAlarm();
+		break;
+	}
+
+	case APOLLO_MSG_SAFEZONE_ALARM: {
+		playSafeZoneAlarm();
+		break;
+	}
+
+	case APOLLO_MSG_LONGSAT_ALARM: {
+		playLongSatAlarm();
+		break;
+	}
+
+	case APOLLO_MSG_LOWPOWER_ALARM: {
+		playLowPowerAlarm();
+		break;
+	}
+	case APOLLO_MSG_SOS_CLEAR: {
+		////
+		break;
+	}
+	case APOLLO_MSG_LED_ON: {
+		
+		//if (flat_status_tep == FLAT_STATUS_ON) {
+			srv_gpio_setting_set_bl_time(6);
+		//}
+		break;
+	}
+
+	case APOLLO_MSG_BUZZER_DEVICE_OPEN: {
+		//DRV_SetData(0xA07001B0,0x433,0x433);
+		kal_prompt_trace(MOD_YXAPP," cmd\n");
+		VIBR_ON();
+		break;
+	}
+	case APOLLO_MSG_BUZZER_DEVICE_CLOSE: {
+		//DRV_SetData(0xA07001B0,0x433,0x002);
+		kal_prompt_trace(MOD_YXAPP," cmd 1\n");
+		VIBR_OFF();
+		break;
+	}
+	case APOLLO_MSG_LIGHT1_DEVICE_OPEN: {
+		
+		break;
+	}
+	case APOLLO_MSG_LIGHT1_DEVICE_CLOSE: {
+		
+		break;
+	}
+	case APOLLO_MSG_LIGHT2_DEVICE_OPEN: {
+		
+		break;
+	}
+	case APOLLO_MSG_LIGHT2_DEVICE_CLOSE: {
+		
+		break;
+	}
+	
+	case APOLLO_BURN_KEY_MSG: {
+		int i = 0;
+		writeApolloKey((CHAR*)APOLLO_DEVICE_KEY, recv_apollo_key, 16);
+		kal_prompt_trace(MOD_YXAPP," writeApolloKey: %s \n", (U8*)recv_apollo_key);	
+		apollo_key_ready = 1;
+		//set apollo key
+		for (i = 0;i < 16;i += 2) {
+			apollo_key_buf[i/2] = (recv_apollo_key[i] - 0x30) << 4 | (recv_apollo_key[i+1] - 0x30);
+		}
+		//reset server ip
+		#if 0
+		strcpy((char*)yxNetContext_ptr.hostName,(char*)YX_DOMAIN_NAME_DEFAULT);
+		yxNetContext_ptr.port = YX_SERVER_PORT;
+		#else
+		ApolloSetServerConf();
+		#endif
+		break;
+	}
+	//case 88:
+		
+		//break;
+	default:
+		break;
+#endif
+	}
+}
+
+void YxAppMMiRegisterMsg(void)
+{
+	SetProtocolEventHandler(YxMMIProcMsgHdler,MSG_ID_MMI_JAVA_UI_TEXTFIELD_HIDE_REQ);
+	//SetProtocolEventHandler(YxMMIProcTimerMsgHdler,MSG_ID_MMI_JAVA_UI_TEXTFIELD_HIDE_RSP);
+}
+
+

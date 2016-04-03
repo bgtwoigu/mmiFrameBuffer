@@ -13,6 +13,12 @@
 #include "TimerEvents.h"
 #include "app_datetime.h"
 #include "YxBasicApp.h"
+
+#if 1 //Update By WangBoJing 20150914
+#include "ApolloProtocol.h"
+#endif
+
+
 ////////////////////////////////////////////////////////////Global define///////////////////////////////////////////////////////////////////
 #define GetDateTime(t) applib_dt_get_date_time((applib_time_struct *)t)
 #define   YXAPP_SMS_COMMAND_NUM        3
@@ -39,22 +45,33 @@
 #define MG_ADD_KEYDATA_HEAD(a,k)   sprintf(a,"%s+%s=",a,k);
 #define MG_ADD_KEYDATA_DATA(a,d)   strcat(a,d);
 #define MG_ADD_KEYDATA_TAIL(a)     strcat(a,"\r\n\r\n");
+
+
+
 ////////////////////////////////////////////////////////////Global vars///////////////////////////////////////////////////////////////////
 //²ÉÓÃIKÍ¨Ñ¶Ð­Òé
 static YXPROTOCOLPARAM yxProtocolPkg;
 //±¾Ð­Òé×ÜÌå¸ñÊ½:³¤¶È(4B)+°æ±¾(1B)+Êý¾ÝÖÖÀà(1B,'1'ÎªÎÄ±¾,'2'ÎªÓïÒô,'3'ÎªÍ¼Æ¬,'4'ÎªAGPSÐÇÀúÊý¾Ý,'5'Îª¹ýÈ¥°üÊý¾Ý)+ID(5B)+IMEI(15B)+DATA(ÎÄ±¾Ö¸Áî»òÓïÒôÊý¾Ý»òÍ¼Æ¬Êý¾Ý)+CRC(2B)
 //ÎÄ±¾Ö¸Áî²ÉÓÃ"+CMD=\r\n"¸ñÊ½,ÎÄ×Ö±àÂë²ÉÓÃUTF8¸ñÊ½,½áÊø·ûÎª:&#,
 ////////////////////////////////////////////////////////////SMS data proc///////////////////////////////////////////////////////////////////
+
 //·µ»ØÖµËµÃ÷:0:²»À¹½Ø´Ë¶ÌÐÅ,1:À¹½Ø´Ë¶ÌÐÅ,±¾ÑùÁÐÒÔ¶ùÍ¯»úÎªÀý,ËùÓÐ¶ÌÐÅ¶¼À¹½Ø,¶¼ÈÏÎªÊÇÃüÁî,¼´¶¼·µ»Ø1
 char YxAppCustomerSmsContentFilter(U8* number,U8 num_len,U8* content,U16 content_len,char encoding,MYTIME *timeStamp)
 {
+extern void YxAppSendSmsIntenal(S8* number,char gsmCode,U16* content);//ucs2
+	unsigned char sms_temp[140]={0};
+
 #if(YX_IS_TEST_VERSION!=0)
 	U8     bufft[40];
 #endif
+
 #if(YX_IS_TEST_VERSION!=0)
 	sprintf((char*)bufft,"New sms:%d,%d,%d,%d:%d:%d:NUM:%d\r\n",content[0],content[1],content[2],content[3],content_len,encoding,num_len);
 	YxAppTestUartSendData(bufft,strlen((char*)bufft));
 #endif
+
+
+
 	YxAppSmsCheckDateTime(timeStamp);
 	if((encoding!=0 && encoding!=8)||(num_len==0)||(number==NULL))//only proc english,gsm ascii
 		return 1;
@@ -62,222 +79,103 @@ char YxAppCustomerSmsContentFilter(U8* number,U8 num_len,U8* content,U16 content
 	{
 		if((strstr((char*)number,"10086")!=NULL)||(strstr((char*)number,"10010")!=NULL))
 		{
-			char startN = 0,j = 0,number[12];
+
 			U16  i = 0;
+			char isYeSms = 0;
 			while(i<content_len)
 			{
-				if(startN==1)
-				{
-					if((j<12)&&((content[i]>='0' && content[i]<= '9')||content[i]=='.'))
-						number[j++] = (char)content[i];
-					else
-						break;
-				}
 				if((i+4<content_len)&&(content[i]==0x59&&content[i+1]==0x4F&&content[i+2]==0x9D&&content[i+3]==0x98))//Óà¶î
 				{
-					startN = 1;
-					i += 2;
+					isYeSms = 1;
+					break;
 				}
 				i += 2;
 			}
-			number[j] = 0;
-			if(j>1)
+			if(isYeSms)
 			{
-				U16  content[21];
-				j = 0;
-				startN = 0;
-				i = (U16)(atof(number)*100);
-			//	YxAppLogAdd(LOG_SMS,'1',i);
-				content[j++] = 0x5F53;
-				content[j++] = 0x524D;
-				content[j++] = 0x4F59;
-				content[j++] = 0x989D;
-				while(j<19)
+				//YxAppSmsSetYeBufferContent(content,content_len);
+				//µÃµ½ÁË»°·Ñ²éÑ¯µÄ·µ»Ø¶ÌÐÅ
+				unsigned char i=0;
+				while(1)
 				{
-					if(startN<strlen(number))
-						content[j++] = number[startN++];
-					else
-						break;
+					sms_temp[i] = content[i];
+					i++;
+					if(i>135)break;
+					if(i>=content_len)break;
 				}
-				content[j++] = 0x5143;
-				content[j++] = 0;
-				YxAppSendSms(NULL, content,0);
+				{
+					U16 *qp;
+					qp = (U16 *)sms_temp;
+					SmsSend_to_phone(qp);
+				}
 			}
 		}
 		return 1;
 	}
 	else
 	{
-		U16    i = 0,k = 0;
-		char   oki = 1,j=0;
-		const char *smskeyword[YXAPP_SMS_COMMAND_NUM]=//only examples,format:#host#
-		{
-			"host",
-			"cxye",
-			"yxjt"
-		};
-		j = 0;
-		while(j < YXAPP_SMS_COMMAND_NUM)
-		{
-			i = 0;
-			k = 0;
-			oki = 1;
-			if(content[i] != '#')
-				return 1;
-			i += 2;
-			while((smskeyword[j][k])&&(i < content_len))
-			{
-				if(content[i] != smskeyword[j][k])
-				{
-					oki = 0;
-					break;
-				}
-				i += 2;
-				k++;
-			}
-			if((smskeyword[j][k]==0x00)&&(oki)&&(content[i]=='#'))
-				break;
-			j++;
-		}
-		if(j >= YXAPP_SMS_COMMAND_NUM)
-			return 1;
-		switch(j)//commands proc
-		{
-		case 0://format:#host#=www.abc.com,8080,
-			{
-				char   hostName[YX_HOST_NAME_MAX_LEN+1],num[6];
-				U16    port = 0;
-				memset((void*)num,0,6);
-				i += 12;
-				j = 0;
-				oki = 0;
-				while(i<content_len)
-				{
-					if(content[i] == '=')
-						oki=1;
-					else if(content[i] == ',')
-					{
-						if(oki==1)//host name
-							hostName[j] = 0x00;
-						else if(oki==2)//port
-						{
-							num[j] = 0;
-							break;
-						}
-						j = 0;
-						oki++;
-					}
-					else
-					{
-						if(oki==1)//host name
-						{
-							if(j<YX_HOST_NAME_MAX_LEN)
-								hostName[j++] = (char)content[i];
-						}
-						else if(oki==2)//port
-						{
-							if(j<5)
-								num[j++] = (char)content[i];
-						}
-					}
-					i += 2;
-				}
-				port = atoi(num);
-				YxAppSetServerParams(hostName,port);//save host name and port
-			}
-			break;
-		case 1://#cxye#²éÑ¯Óà¶î
-			{
-				char *numberk = "10086";
-				U16  content[5];
-				YxAppSetSmsNumber((S8*)number,num_len);
-				if(YxAppGetSimOperator(YX_APP_SIM1)==MSIM_OPR_UNICOM)
-				{
-					content[0] = 'C';
-					content[1] = 'X';
-					content[2] = 'H';
-					content[3] = 'F';
-					numberk = "10010";
-				}
-				else
-				{
-					content[0] = 'C';
-					content[1] = 'X';
-					content[2] = 'Y';
-					content[3] = 'E';
-				}
-				content[4] = 0;
-				YxAppSendSms(numberk, content,1);
-			}
-			break;
-		case 2://#yxjt#ÓïÒô¼àÌý
-			{
-				if(YxAppMakeWithCallType(YX_CALL_LISTEN,(S8*)number)==0)
-				{//Í¨»°ÖÐ£¬ÇëÉÔºòÔÙ¼àÌý
-					const U16  content[11]={0x901A,0x8BDD,0x4E2D,0xFF0C,0x8BF7,0x7A0D,0x5019,0x518D,0x76D1,0x542C,0x0000};
-					YxAppSendSms((S8*)number, (U16*)content,1);
-				}
-			}
-			break;
-		}
+
 	}
 	return 1;//is command sms,don't display
 }
 
-////////////////////////////////////////////////////////////Call call cb///////////////////////////////////////////////////////////////////
 
+////////////////////////////////////////////////////////////Call call cb///////////////////////////////////////////////////////////////////
+extern void CALL_incoming(void);
 kal_bool YxAppCallNumberIsAllowed(char callType,S8 *number)//callType:1:À´µç.ºÅÂëÎªASCIIÂë,·µ»ØTRUE:ÔÊÐí,FASE:½ûÖ¹
 {
 	YXMONITORPARAM    *numList = NULL;
 	U8                index = 0,i = 0;
+	
 #if(YX_IS_TEST_VERSION!=0)
 	char              logBuf[51];
 	sprintf(logBuf,"calls:%s,t:%d\r\n",number,callType);
 	YxAppTestUartSendData((U8*)logBuf,strlen(logBuf));
 #endif
-	if(callType==1)
+
+	if( refused_to_stranger_calls_status_flag == REFUSED_TO_STRANGER_CALLS_STATUS_ON )
 	{
-		if(number && (strlen(number)<3))//no incomming call number
+		unsigned char i=0;
+		
+		if( strstr(number,"13530514107") == NULL );
+		else i=1;
+
+		if(i)
 		{
-			if(YxAppFirewallReadWriteStatus(3)!=0)
-				return KAL_FALSE;
-			else
-				return KAL_TRUE;
-		}
-		if(YxAppCheckTimeIsHiddenTime()==1)
-			return KAL_FALSE;
-	}
-	while(index<YX_MAX_MONITOR_NUM)
-	{
-		numList = YxAppGetMonitorList(index,0);
-		if((numList)&&(strlen(numList->number)>0)&&(strstr(number,numList->number)))
+			CALL_incoming();
+
+			if( call_automatic_answering_status_flag == CALL_AUTOMATIC_ANSWERING_STATUS_ON )
+			{
+				//×Ô¶¯½ÓÌý
+				StartTimer(CALL_TIMER,5000,CALL_incoming_connect);
+			}
+			
 			return KAL_TRUE;
-		if((numList)&&(numList->number[0]==0))
-			i++;
-		index++;
-	}
-	if(callType==1)
-	{
-		index = 0;
-		i = 0;
-		while(index<YX_WHITE_NUM_LIST_MAX)
+		}
+		else
 		{
-			numList = YxAppGetFirewallItemBy(index);
-			if((numList)&&(strlen(numList->number)>0)&&(strstr(number,numList->number)))
-				return KAL_TRUE;
-			if((numList)&&(numList->number[0]==0))
-				i++;
-			index++;
+			//Ä°ÉúÈË
+			return KAL_FALSE;
 		}
 	}
-	if(i==index)
+	else
+	{
+		//À´µçÖ±½Ó½ÓÍ¨
+		CALL_incoming();
+		
+		if( call_automatic_answering_status_flag == CALL_AUTOMATIC_ANSWERING_STATUS_ON )
+		{
+			//×Ô¶¯½ÓÌý
+			StartTimer(CALL_TIMER,5000,CALL_incoming_connect);
+		}
 		return KAL_TRUE;
-	return KAL_FALSE;
+	}
+	
 }
 
 void YxAppEndCallCb(void)//when call is released,it calls this cb
 {
-	YxAppCallEndProc();
+	//YxAppCallEndProc();
 }
 
 ////////////////////////////////////////////////////////////gprs data proc///////////////////////////////////////////////////////////////////
@@ -308,6 +206,7 @@ static kal_uint16 YxProtocolCheckSum(kal_uint8 *buf,kal_uint16 len)
 	return checksum;
 }
 
+#if 0
 U16 YxAppBuildTxtCmdGpsUploadPackage(char savepkg,U8 *sendBuf,U16 maxLen) //¶¨Î»°ü
 {
 	YXSYSTEMPARAM     *setParam = YxAppGetSystemParam(0);
@@ -480,6 +379,12 @@ U16 YxAppBuildTxtCmdGpsUploadPackage(char savepkg,U8 *sendBuf,U16 maxLen) //¶¨Î»
 	sendBuf[i-1] = (U8)(checkSum>>8);
 	return i;
 }
+#endif
+
+U16 YxAppBuildTxtCmdGpsUploadPackage(char savepkg,U8 *sendBuf,U16 maxLen) { //¶¨Î»°ü
+	return 0;
+}
+#if 0
 
 U16 YxAppBuildTxtCmdHeartUploadPackage(U8 *sendBuf,U16 maxLen)//ÐÄÌø°ü,×¼±¸ÒªÉÏ´«µÄÊý¾Ý
 {
@@ -619,7 +524,289 @@ U16 YxAppBuildTxtCmdHeartUploadPackage(U8 *sendBuf,U16 maxLen)//ÐÄÌø°ü,×¼±¸ÒªÉÏ´
 	sendBuf[i-1] = (U8)(checkSum>>8);
 	return i;
 }
+#else
 
+#if 1
+
+U8 get_heart_packet_response_header(U8 *response) {
+	return response[0];
+}
+
+U8 get_heart_packet_response_cmd(U8 *response) {
+	return response[HEART_CMD_INDEX];
+}
+
+extern U16 apollo_flag;
+extern U16 u16WatchStatusFlag;
+extern YXAPPSOCKCONTEXT yxNetContext_ptr;
+
+extern kal_int8 soc_close(kal_int8 s);
+#endif
+
+
+extern int apollo_init_aes_ctx(void) ;
+extern void apollo_encrypt(unsigned char input[], unsigned char output[]) ;
+extern void apollo_decrypt(unsigned char input[], unsigned char output[]);
+extern APDS9901_STATUS flag_Prox_data;
+
+U16 YxAppBuildTxtCmdHeartUploadPackage(U8 *sendBuf,U16 maxLen) {
+	YXSYSTEMPARAM     *setParam = YxAppGetSystemParam(0);
+//	YXMONITORPARAM    *moniInfor = NULL;
+//	YXLOGPARAM        *logParam = NULL;
+
+	char i = 0;
+	unsigned char buf[32] = { //standard heart package
+		'H', 0x00, 0x86, 0x18, 0x87, 0x41, 0x87, 0x42,
+		0x90, 0x15, 0x10, 0x00, 0x02, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+		0x00, 0x00, '%', '%', '%', '%', '%', '%', 
+	};
+
+	buf[16] = srv_nw_info_get_signal_strength_in_percentage(MMI_SIM1);
+	buf[17] = flag_Prox_data<<4 & 0xF0 | 0x0F&srv_charbat_get_battery_level();
+	buf[18] = u16WatchStatusFlag % 0xFF;
+	buf[19] = u16WatchStatusFlag / 0xFF;
+	
+	//(*(unsigned int*) (buf+HEART_APOLOO_ID_START)) = (unsigned int)APOLLO_ID; //get apollo_id
+#if 0
+	*(buf+HEART_RESPONSE_CMD_INDEX) = heart_info.cmd;
+
+	if (heart_info.cmd  != COMMAND_NULL) {
+		if (heart_info.cmd == TELEPHONEFARE_SELECT) {
+			*(buf+HEART_RESPONSE_RES_START) = *tele_fare;
+			*(buf+HEART_RESPONSE_RES_START+1) = *(tele_fare+1);
+			*(buf+HEART_RESPONSE_RES_START+2) = *(tele_fare+2);
+		}
+
+		for (i = 0;i < TELE_NUMBER_LENGTH;i += 2) {
+			*(buf+HEART_RESPONSE_TEL_START+ i / 2) = STRINGTOHEX(heart_info.tele_number[i], heart_info.tele_number[i+1]);
+		}
+	}
+	
+#endif
+	//apollo_init_aes_ctx();
+	//apollo_encrypt(buf, buf);
+	//apollo_encrypt(buf+16, buf+16);
+	
+
+	//S8   *tempStr = (S8*)(sendBuf+1);
+	//sendBuf[0] = 'H';
+
+	for (i = 0;i < 32;i ++) {
+		sendBuf[i] = buf[i];
+	}
+	return i;
+}
+
+#endif
+
+extern U8 apollo_key_buf[12];
+extern U8 recv_apollo_key[20];
+extern U8 apollo_key_ready; //0 download key, 1 key ready
+extern U8 sos_key; 
+extern U8 diedao_key;
+extern U32 step_num;
+extern U32 sleep_quality;
+extern U8 blockDataFlag;
+
+
+#define isPrime(year) ((year%4==0&&year%100!=0)||(year%400==0))  
+struct SampleDate  {  
+    int year;  
+    int month;  
+    int day;  
+}; 
+
+
+int dateDiff(struct SampleDate mindate,struct SampleDate maxdate)  
+{  
+    int days=0,j,flag;  
+    const int primeMonth[][12]={{31,28,31,30,31,30,31,31,30,31,30,31},{31,29,31,30,31,30,31,31,30,31,30,31}};     
+    /************************************************************************/  
+    /*        ½»»»Á½¸öÈÕÆÚº¯Êý,½«Ð¡µÄÈÕÆÚ¸ømindate,½«´óµÄÈÕÆÚ¸ømaxdate     */  
+    /************************************************************************/  
+    struct SampleDate tmp;  
+    if ((mindate.year>maxdate.year)|| (mindate.year==maxdate.year&&mindate.month>maxdate.month)||(mindate.year==maxdate.year&&mindate.month==maxdate.month&&mindate.day>maxdate.day))  
+    {  
+        tmp=mindate;  
+        mindate=maxdate;  
+        maxdate=tmp;  
+    }   
+    /************************************************************************/  
+    /*  ´Ómindate.year¿ªÊ¼ÀÛ¼Óµ½maxdate.year                                */  
+    /************************************************************************/  
+    for(j=mindate.year;j<maxdate.year;++j)  
+        days+=isPrime(j)?366:365;  
+      
+    //Èç¹ûmaxdate.yearÊÇÈòÄê,Ôòflag=1,ºóÃæµ÷ÓÃprimeMonth[1][12]  
+    flag=isPrime(maxdate.year);  
+    //¼ÓÉÏmaxdate.monthµ½1ÔÂµÄÌìÊý  
+    for (j=1;j<maxdate.month;j++)  
+        days+=primeMonth[flag][j-1];  
+  
+    //¼õÈ¥mindate.monthµ½1ÔÂµÄÌìÊý  
+  
+    flag=isPrime(maxdate.year);  
+    for (j=1;j<mindate.month;j++)  
+      days-=primeMonth[flag][j-1];  
+    days=days+maxdate.day-mindate.day;  
+    return days;  
+}   
+
+kal_uint8 oldMin = 0;
+kal_uint8 u8Sec = 0;
+
+
+
+U32 getSecondOff(void) {
+	struct SampleDate beginTime = {2010, 1, 1};
+	struct SampleDate nowTime = {0};
+	applib_time_struct   dt;
+	int diff = 0;
+	
+	applib_dt_get_date_time(&dt);
+
+	nowTime.day = dt.nDay;
+	nowTime.month = dt.nMonth;
+	nowTime.year = dt.nYear;
+
+	u8Sec += 5;
+	if (oldMin != dt.nMin) {
+		oldMin = dt.nMin;
+		u8Sec = 0;
+	}
+
+	diff = dateDiff(beginTime, nowTime);
+	return (diff*24*60*60 + dt.nHour*60*60 + dt.nMin*60 + u8Sec);
+}
+
+void Apollo_U32_datacpy(U8 *send, U32 num) {
+	U8* pNum = (U8*)(&num);
+	int i = 0;
+
+	for (i = 0;i < 4;i ++) {
+		send[i] = (U8)*(pNum+i);
+	}
+}
+
+void Apollo_set_burnkey(U8 *sendBuf, U8 *key) {
+	int i = 0;
+	for (i = 0;i < 8;i ++) {
+		sendBuf[i+1] = key[i];
+	}
+}
+
+S32 Apollo_send_burnkey_package(U8 *sendBuf, U16 maxLen) {
+	int i = 0;
+	U8 key_request[8] = { 
+		'k', 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+	};
+
+	for (i = 0;i < 8;i ++) {
+		sendBuf[i] = key_request[i];
+	}
+	return 8;
+}
+
+S32 Apollo_send_heart_package(U8 *sendBuf, U16 maxLen) {
+	//Apollo_set_burnkey();
+	int i = 0;
+	U32 timeDiff = getSecondOff();
+	Apollo_set_burnkey(heartHeader, apollo_key_buf); //set key
+
+	heartHeader[9] = srv_charbat_get_battery_level(); //set battery
+
+	heartHeader[10] = (diedao_key & 0x0F) | (sos_key & 0x0F << 4); //
+	heartHeader[11] = u16WatchStatusFlag & 0x00FF;
+	heartHeader[12] = u16WatchStatusFlag & 0xFF00 >> 8;
+
+	Apollo_U32_datacpy(heartHeader+13, step_num); //set step num
+	Apollo_U32_datacpy(heartHeader+17, sleep_quality); //set sleep quality
+	Apollo_U32_datacpy(heartHeader+24, timeDiff);
+
+	heartHeader[28] = blockDataFlag;
+	blockDataFlag = 0x0;
+
+	for (i = 0;i < APOLLO_UPLOAD_HEART_LENGTH; i ++) {
+		sendBuf[i] = heartHeader[i];
+	}
+
+	return APOLLO_UPLOAD_HEART_LENGTH;
+	//memccpy(void *, const void *, int, size_t)
+}
+
+S32 Apollo_send_record_data(U8 *sendBuf, U16 maxLen) {
+#ifdef ENABLE_FUNC_RECORDER
+	return Apollo_read_recorder_file(sendBuf);
+#else
+	return ApolloBlueToothRecv(sendBuf);
+#endif
+}
+
+S32 Apollo_send_request_data(U8 *sendBuf, U16 maxLen) {
+	int i = 0;
+
+	kal_prompt_trace(MOD_YXAPP,"Apollo_send_request_data\n");
+
+	for (i = 0;i < APOLLO_HEART_PACKAGE_LENGTH;i ++) {
+		sendBuf[i] = requestHeader[i];
+	}
+	//sendBuf[13] = 0x61;
+
+	Apollo_set_burnkey(sendBuf, apollo_key_buf);
+
+	return 16;
+}
+
+U8 LatLongValue[10] = {0};
+U8 LbsWifiValue[64] = {0};
+U8 PosType = 0x00;
+extern int JW_height;
+
+#define POS_TYPE 9
+
+
+S32 Apollo_send_gps_data(U8 *sendBuf, U16 maxLen) {
+	int i = 0;
+	U32 timeDiff = getSecondOff();
+	kal_prompt_trace(MOD_YXAPP,"PosType : %x\n", PosType);
+	Apollo_set_burnkey(gpsHeader, apollo_key_buf);
+	gpsHeader[POS_TYPE] = 0x0;
+	if (PosType & 0x01) {
+		gpsHeader[POS_TYPE] = 0x01;		
+		PosType = 0x0;
+		for (i = 0;i < 10;i ++) {
+			gpsHeader[POS_TYPE+i +1] = LatLongValue[i];
+		}
+		kal_prompt_trace(MOD_YXAPP," ffff JW_height:%d\n", JW_height);
+		Apollo_U32_datacpy(gpsHeader+24, JW_height);
+		Apollo_U32_datacpy(gpsHeader+20, timeDiff);
+		//kal_prompt_trace(MOD_YXAPP," %x %x %x %x\n", gpsHeader[24], gpsHeader[25], gpsHeader[26], sendBuf[27]);
+		for (i = 0;i < 32;i ++) {
+			sendBuf[i] = gpsHeader[i];
+		}
+		return 32;
+	} 
+	if (PosType == 0x0) return 0;
+	if (PosType & 0x02) {
+		gpsHeader[POS_TYPE] |= 0x02;
+	} 
+	if (PosType & 0x04) {
+		gpsHeader[POS_TYPE] |= 0x04;
+	}
+	for (i = 0;i < 34;i ++) {
+		gpsHeader[POS_TYPE+i +1] = LbsWifiValue[i];
+	}
+	Apollo_U32_datacpy(gpsHeader+44, timeDiff);
+	for(i = 0;i < APOLLO_UPLOAD_GPS_LENGTH;i ++) {
+		sendBuf[i] = gpsHeader[i];
+	}
+	kal_prompt_trace(MOD_YXAPP," id1:%x, id2:%x, PosType : %x\n",sendBuf[9], sendBuf[10], PosType);
+	//PosType = 0x0;
+	return APOLLO_UPLOAD_GPS_LENGTH;
+}
+
+#if 0
 static S32 YxAppSendUnloadData(U8 *sendBuf,U16 maxLen)
 {
 	S32   datLength = YxAppGetUnsendDataLength(),i = 0,j = 0,bufLen = 0;
@@ -655,21 +842,169 @@ static S32 YxAppSendUnloadData(U8 *sendBuf,U16 maxLen)
 	tempBuf[i-1] = (U8)(checkSum>>8);
 	return i;
 }
+#endif
+#ifndef APOLLO_VOICE_FILENAME
+#define APOLLO_VOICE_FILENAME		L"\\voice.amr"
+#endif
+
+UINT Apollo_write_voice_data(PU8 data,UINT size) {
+	FS_HANDLE fh = 0;
+	U8     path_ascii[64];
+	U8     path[64 * 2];
+	UINT   wrsize = 0;
+	
+	//ilm_struct *apollo_ilm = NULL;
+	//unsigned char *p = (unsigned char*)construct_local_para(3,TD_CTRL);
+	
+	memset(path_ascii,0x00,64);
+	sprintf((char*)path_ascii,"%c:\\%s",(S8)SRV_FMGR_PUBLIC_DRV,YX_FILE_FOLD_NAME);
+	mmi_asc_to_ucs2((CHAR*)path,(CHAR*)path_ascii);
+	mmi_ucs2cat((CHAR*)path,(CHAR*)APOLLO_VOICE_FILENAME);
+	
+	kal_prompt_trace(MOD_YXAPP," aaa path:%s\n", path);
+	fh = FS_Open((const U16*)path,FS_CREATE_ALWAYS|FS_READ_WRITE|FS_CACHE_DATA);
+	if(fh>=FS_NO_ERROR) {
+		
+		FS_Write(fh,(void*)data,size,(UINT*)&wrsize);
+
+		FS_Commit(fh);
+		FS_Close(fh);
+
+		//send msg to queue
+		/*
+		p[0] = APOLLO_PLAY_RECV_VOICE_DATA;
+		
+		apollo_ilm = allocate_ilm(MOD_MMI);
+		apollo_ilm->msg_id = MSG_ID_MMI_JAVA_UI_TEXTFIELD_HIDE_REQ;
+		apollo_ilm->local_para_ptr = (local_para_struct*)p;
+		apollo_ilm->peer_buff_ptr = NULL;
+
+		apollo_ilm->src_mod_id  = MOD_MMI;//MOD_L4C;
+		apollo_ilm->dest_mod_id = MOD_MMI;
+		apollo_ilm->sap_id = MOD_MMI;//MMI_L4C_SAP;
+		msg_send_ext_queue(apollo_ilm);
+		*/
+	}
+	return wrsize;
+}
+
+void Apollo_play_network_data(void) {
+	StopTimer(APOLLO_PLAY_RECV_DATA_TIMER);
+
+	YxAppSendMsgToMMIMod(APOLLO_PLAY_RECV_VOICE_DATA, 0, 0);
+}
+
+void ApolloSendSerialReady(void) {
+	StopTimer(APOLLO_PLAY_RECV_VOICE_DATA);
+	YxAppSendMsgToMMIMod(APOLLO_MSG_SERIALPORT_SEND, 0, 0);
+}
+
+extern void Uart1_sends(U8 *buff,U16 len);
+S32 Apollo_read_voice_packet(U32 *readlen, U32 *readIndex, U8 *readBuffer) {
+	S32 n = 0;
+	S32 index  = *readIndex;
+	U16 len = 0;
+	U8 packet_index;
+	PU8 voice_data = YxProtocolGetBigBuffer();
+	UINT voice_size = *readlen;
+	U16 i = 0;
+	U8 *buffer = readBuffer;
+	
+	
+	while (1) {
+		n = YxAppTcpSockRead(buffer+index,VOICE_PACKET_SIZE - index);
+
+		if (n < 0) {
+			*readlen = voice_size;
+			*readIndex = index;
+			break;
+		}
+		if (n + index >= VOICE_PACKET_SIZE && buffer[13] + 1 != buffer[29]) {
+			len = buffer[30] * 256 + buffer[31];
+			packet_index = buffer[13];
+			for (i = 0;i < len;i ++) {
+				voice_data[packet_index * (VOICE_PACKET_SIZE - VOICE_HEADER_SIZE) + i] = buffer[VOICE_HEADER_SIZE + i];
+			}
+#if 0 //Update By WangBoJing
+			Uart1_sends(buffer+VOICE_HEADER_SIZE, len);
+#endif
+			index = 0;
+			voice_size += len;
+		} else {
+			index += n;
+		}
+		kal_prompt_trace(MOD_YXAPP,"read data k:%d , size:%d\n", n, voice_size);
+		if (buffer[13] + 1 == buffer[29] && index >= (buffer[30] * 256 + buffer[31])) {
+			len = buffer[30] * 256 + buffer[31];
+			packet_index = buffer[13];
+			for (i = 0;i < len;i ++) {
+				voice_data[packet_index * (VOICE_PACKET_SIZE - VOICE_HEADER_SIZE) + i] = buffer[VOICE_HEADER_SIZE + i];
+			}
+#if 0 //Upoate By WangBoJing
+			Uart1_sends(buffer+VOICE_HEADER_SIZE, len);
+#endif
+			index = 0;
+			voice_size += len;
+
+			*readlen = 0;
+			*readIndex = 0;
+			ApolloAppSetRunFlag(APOLLO_RUNKIND_HEART_COMPLETE);
+			Apollo_write_voice_data(voice_data, voice_size);
+
+			StartTimer(APOLLO_PLAY_RECV_VOICE_DATA, YX_HEART_TICK_UNIT, ApolloSendSerialReady);
+			blockDataFlag = 0x01;
+			//download complete
+			apollo_flag = YxAppGetRunFlag();
+			if (apollo_flag == APOLLO_RUNKIND_VOICE_DOWNLOAD) {
+				ApolloAppSetRunFlag(APOLLO_RUNKIND_HEART_COMPLETE);
+			}
+			break;
+		}
+
+	}
+	return 0;
+}
 
 S32 YxAppSockConnectedCallback(U8 *sendBuf,U16 maxLen)//maxlen:YX_SOCK_BUFFER_LEN,Á¬½Ó·þÎñÆ÷³É¹¦Ê±µÄ»Øµ÷º¯Êý,¿ÉÒÔÔÚÀïÃæ×¼±¸ÒªÉÏ´«µÄÊý¾Ý,²¢ÉÏ´«µ½·þÎñÆ÷ÉÏ.·µ»Ø>0:´ú±íÒª·¢ËÍÊý¾Ýµ½·þÎñÆ÷,0Ôò²»Òª
 {
+#if 0
 	U16  flag = YxAppGetRunFlag();
 	YxProtocolFreeRes();
 	if(flag & YX_RUNKIND_OWNER_HEART)
 		return YxAppBuildTxtCmdHeartUploadPackage(sendBuf,maxLen);
 	else
 	{
+	#if 0
 		S32   datLength = YxAppSendUnloadData(sendBuf,maxLen);
+	#else
+		S32   datLength = Apollo_send_record_data(sendBuf,maxLen);
+	#endif
 		if(datLength>0)
 			return datLength;
 		else
 			return YxAppBuildTxtCmdGpsUploadPackage(0,sendBuf,maxLen);
 	}
+#else
+	U16  flag = YxAppGetRunFlag();
+	YxProtocolFreeRes();
+	
+	if (apollo_key_ready == 0) { //download key
+		return Apollo_send_burnkey_package(sendBuf,maxLen);
+	} 
+	
+	if(flag & YX_RUNKIND_OWNER_HEART) 
+		return Apollo_send_heart_package(sendBuf,maxLen);
+	else if (flag & APOLLO_RUNKIND_VOICE_UPLOAD) {
+		return Apollo_send_record_data(sendBuf,maxLen);
+	} else if (flag & APOLLO_RUNKIND_VOICE_DOWNLOAD) {
+		return Apollo_send_request_data(sendBuf, maxLen);
+	} else if (flag & YX_RUNKIND_OWNER_GPS){
+		return Apollo_send_gps_data(sendBuf, maxLen);
+	}
+	
+
+
+#endif
 }
 
 static U16 YxAPPCommandProc(S8 *cmdStr,U16 length,U8 *resCmd)
@@ -900,10 +1235,24 @@ static U16 YxAPPCommandProc(S8 *cmdStr,U16 length,U8 *resCmd)
 				YxAppSetCurrentProfile(pro);
 			if((bat>0)||(setParam->uploadTick != gprs)||(setParam->gpsTimes != gps))
 			{
-				setParam->uploadTick = gprs;
-				setParam->gpsTimes = gps;
-				if(YxAppSystemReadWriteLowBattery(0,bat)==0)
-					YxAppSaveSystemSettings();
+				char needSave = 0;
+				if(gprs>=YX_HEAT_TIME_MIN && gprs<=YX_HEAT_TIME_MAX)
+				{
+					needSave = 1;
+					setParam->uploadTick = gprs;
+				}
+				if(gps>=YX_GPS_TIME_MIN && gps<=YX_GPS_TIME_MAX)
+				{
+					needSave = 2;
+					setParam->gpsTimes = gps;
+				}
+				if(bat>0)
+					needSave = 3;
+				if(needSave)
+				{
+					if(YxAppSystemReadWriteLowBattery(0,bat)==0)
+						YxAppSaveSystemSettings();
+				}
 			}
 			cmdStr += 2;
 			i = (U16)(cmdStr - odlStr);
@@ -1319,65 +1668,206 @@ static U16 YxAppProtocolDataProcMain(U8 *data,U16 dataLen,U8 *sendBuff,U16 sendB
 	return 0;
 }
 
+
+extern YXAPPSOCKDATAPARAM yxAppSockData;
+extern U8 recv_apollo_key[20];
+extern U8 u8GpsProgress;
+extern WatchConf WatchInstance;
+extern void gps_start(void);
+extern void ApolloGPSDataCallback(void);
+int ApolloWatchSave(void);
+
+
+char phonenumber[20] = {0};
+
+
 S32 YxAppSockReadDataCallback(U8 *readBuf,U16 readLen,U8 *sendBuffer)//readBuf:´Ó·þÎñÆ÷¶ÁÈ¡µÄÊý¾Ý,readLen:Êý¾Ý³¤¶È,¿ÉÒÔÔÚ´Ë´¦ÀíÄãÃÇµÄÊý¾ÝÐ­Òé,sendBuffer:Èç¹ûÓÐÊý¾ÝÒªÉÏ´«µ½·þÎñÆ÷ÉÏ,ÇëÌîÐ´Êý¾Ýµ½´ËBUFFERÖÐ,×¢Òâ,´ËBUFFERµÄ×î´ó³¤¶ÈÎªYX_SOCK_BUFFER_LEN,·µ»ØÖµÎª0Ê±,²»ÒªÉÏ´«Êý¾Ý£¬°´SENDBUFFERµÄÊµ¼Ê³¤¶È×Ö½Ú·µ»Ø
 {
-#if 1
-	if(yxProtocolPkg.totalLen==0)
-	{
-		yxProtocolPkg.dataLen = 0;
-		yxProtocolPkg.totalLen = (readBuf[3]<<24)|(readBuf[2]<<16)|(readBuf[1]<<8)|readBuf[0];
-		if(yxProtocolPkg.totalLen==0)
-			return 0;
-		else if(yxProtocolPkg.totalLen>YX_BIG_MEMERY_LEN)
-			return YxAppShortCmdBuild('3',sendBuffer);
+#if (APOLLO_PROTOCOL_VERSION == APOLLO_ODM_AOXIN_OLDMAN_WATCH)
+	int i = 0;	
+	
+	//apollo_init_aes_ctx();
+	//apollo_decrypt(readBuf, readBuf);
+	kal_prompt_trace(MOD_YXAPP,"aaa {wbj_debug} readBuf[0]:%c, %x %x, %x, %x, %x, %x, cmd:%x, readLen:%d\n", readBuf[0],readBuf[0], readBuf[1],
+					readBuf[2], readBuf[3], readBuf[4], readBuf[5], readBuf[13], readLen);
+#if 0
+	if ((readBuf[0] == 0x01 && readBuf[1]== 0x02) ||(readBuf[0] == 'o' && readBuf[1] == 'k')) {
+		ApolloAppSetRunFlag(APOLLO_RUNKIND_HEART_COMPLETE);
+		return 1;
 	}
-	if(yxProtocolPkg.totalLen<=YX_SOCK_READ_BUFFER_LEN)//1 one get all
-	{
-		U16 res = YxAppProtocolDataProcMain(readBuf,(U16)yxProtocolPkg.totalLen,sendBuffer,YX_SOCK_BUFFER_LEN);
-		yxProtocolPkg.totalLen = 0;
-		return res;
-	}
-	else
-	{
-		if(yxProtocolPkg.dataLen + readLen <= yxProtocolPkg.totalLen)
-		{
-			memcpy((void*)(yxProtocolPkg.bigBuffer+yxProtocolPkg.dataLen),(void*)readBuf,readLen);
-			yxProtocolPkg.dataLen += readLen;
-			if(yxProtocolPkg.dataLen>=yxProtocolPkg.totalLen)//end
-			{
-				U16 res = YxAppProtocolDataProcMain(yxProtocolPkg.bigBuffer,(U16)yxProtocolPkg.totalLen,sendBuffer,YX_SOCK_BUFFER_LEN);
-				yxProtocolPkg.totalLen = 0;
-				yxProtocolPkg.dataLen = 0;
-				return res;
-			}
-			return -1;//continue read data from socket
-		}
-	}
-	return 0;
 #else
-#if(YX_IS_TEST_VERSION!=0)
-	U8     bufft[201];
+	if (readBuf[0] == 'R' && readBuf[1] == 'T' && readBuf[2] == 'O' && readBuf[3] == 'K') {
+		ApolloAppSetRunFlag(APOLLO_RUNKIND_HEART_COMPLETE);
+		return 1;
+	}
+	if (readBuf[0] == 'S' && readBuf[1] == 'E' && readBuf[2] == 'T' && readBuf[3] == 'O' && readBuf[4] == 'K') {
+		U8 ret[4] = {'O', 'K', 0x0, 0x0};
+		//ApolloAppSetRunFlag(APOLLO_RUNKIND_HEART_COMPLETE);
+		extern void Uart1_sends(U8 *buff,U16 len);
+		Uart1_sends(ret, 2);
+
+		if (APOLLO_RUNKIND_VOICE_UPLOAD == YxAppGetRunFlag()) {
+			ApolloAppSetRunFlag(APOLLO_RUNKIND_HEART_COMPLETE);
+		}
+		return 1;
+	}
 #endif
-#if(YX_IS_TEST_VERSION!=0)
-	memset((void*)bufft,0,201);
-	if(readLen>=200)
-		memcpy((void*)bufft,(void*)readBuf,200);
-	else// if(readLen<200)
-		memcpy((void*)bufft,(void*)readBuf,readLen);
-	YxAppTestUartSendData(bufft,strlen((char*)bufft));
-#endif
-	if(readLen>0)
-	{
-		char *resOk = "HTTP/1.1 200 OK\r\n";
-		if(strncmp((char*)readBuf,resOk,strlen(resOk))==0)
-		{
-#if(YX_IS_TEST_VERSION!=0)
-			YxAppTestUartSendData("send ok\r\n",9);
-#endif
-			return 0;//ÉÏ´«³É¹¦,¹Ø±ÕSOCKET
+	//recv apollo key
+	if ((readBuf[0] == 0x6B && readBuf[1] == 0x65 && readBuf[2] == 0x79)) {
+		for (i = 4;i < 20;i ++) {
+			recv_apollo_key[i-4] = readBuf[i];
+		}
+		//APOLLO_BURN_KEY_MSG
+		kal_prompt_trace(MOD_YXAPP, "APOLLO_BURN_KEY_MSG");
+		YxAppSendMsgToMMIMod(APOLLO_BURN_KEY_MSG, 0, 0);
+		return 1;
+	}
+
+	switch (readBuf[0]) {
+		case HEART_PACKAGE_HEADER_CMD: {
+			U8 cmd = get_heart_packet_response_cmd(readBuf);
+			kal_prompt_trace(MOD_YXAPP, "cmd : %x", cmd);
+			switch (cmd) {
+				case COMMAND_NULL:
+				case COMMAND_DEFAULT:
+					break;
+
+
+				case COMMAND_REALTIME_POS:
+					//apollo_flag = YX_RUNKIND_OWNER_GPS;
+					kal_prompt_trace(MOD_YXAPP,"  COMMAND_REALTIME_POS u8GpsProgress:%d\n", u8GpsProgress);
+					if (u8GpsProgress == 0) {
+						gps_start();	
+						u8GpsProgress = 1;
+						StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT, ApolloGPSDataCallback);
+					}
+					break;
+				case COMMAND_VOICE_RECV: {
+					apollo_flag = YxAppGetRunFlag();
+					ApolloAppSetRunFlag(APOLLO_RUNKIND_VOICE_DOWNLOAD);
+					break;
+				}
+				case COMMAND_COUNTSTEP_SETON:
+				case COMMAND_COUNTSTEP_SETOFF:
+				case COMMAND_SLEEPQUALITY_SETON:
+				case COMMAND_SLEEPQUALITY_SETOFF:
+				case COMMAND_ALARM:
+				case COMMAND_SAFEZONE_ALARM:
+				case COMMAND_LONGSAT_ALARM:
+				case COMMAND_LOWPOWER_ALARM:
+					
+				case COMMAND_SOS_MSGREMAINER_OPEN:
+				case COMMAND_SOS_MSGREMAINER_CLOSE:
+				case COMMAND_POWER_MSGREMAINDER_OPEN:
+				case COMMAND_POWER_MSGREMAINDER_CLOSE:
+					
+				case COMMAND_ALARMMUSIC_OPEN:
+				case COMMAND_ALARMMUSIC_CLOSE:
+				case COMMAND_SAFEZONEMUSIC_OPEN:
+				case COMMAND_SAFEZONEMUSIC_CLOSE:
+					
+				case COMMAND_SOS_CLEAR:
+				case COMMAND_PHONEFARE_SELECT: 
+					kal_prompt_trace(MOD_YXAPP," cmd:%x\n", cmd);
+					YxAppSendMsgToMMIMod(cmd, 0, 0); //send msg to queue
+					break;
+					
+				case COMMAND_FAMILYNUMBER_SET: {
+					int i = 0;
+					U8 index = readBuf[IDX_PHONE_INDEX];
+					if (index <= FAMILY_NUMBER_SIZE && index > 0) {					
+						for (i = 0;i < 8;i ++) {
+							phonenumber[2*i] = HIGH_HEXTOSTRING(readBuf[IDX_PHONE_NUMBER + i]);
+							phonenumber[2*i+1] = LOW_HEXTOSTRING(readBuf[IDX_PHONE_NUMBER + i]);
+						}
+						phonenumber[15] = 0;
+
+						//for (i = 0;i < 15;i ++) {
+						//	WatchInstance.u8FamilyNumber[index-1][i] = phonenumber[i];
+						//}
+						strcpy(WatchInstance.u8FamilyNumber[index-1],phonenumber);
+						ApolloWatchSave();
+					}
+					break;
+				}
+				case COMMAND_CONTRACT_SET: {
+					int i = 0;
+					U8 index = readBuf[IDX_PHONE_INDEX];
+					if (index <= CONTACT_NUMBER_SIZE && index > 0) {					
+						for (i = 0;i < 8;i ++) {
+							phonenumber[2*i] = HIGH_HEXTOSTRING(readBuf[IDX_PHONE_NUMBER + i]);
+							phonenumber[2*i+1] = LOW_HEXTOSTRING(readBuf[IDX_PHONE_NUMBER + i]);
+						}
+						phonenumber[15] = 0;
+
+						//for (i = 0;i < 15;i ++) {
+						//	WatchInstance.u8ContactNumber[index-1][i] = phonenumber[i];
+						//}
+						strcpy(WatchInstance.u8ContactNumber[index-1], phonenumber);
+						ApolloWatchSave();
+					}
+					break;
+				}
+				case COMMAND_PHONEBOOK_SET: {
+					int i = 0;
+					U8 index = readBuf[IDX_PHONE_INDEX];
+					if (index <= PHONE_BOOK_SIZE && index > 0) {					
+						for (i = 0;i < 8;i ++) {
+							phonenumber[2*i] = HIGH_HEXTOSTRING(readBuf[IDX_PHONE_NUMBER + i]);
+							phonenumber[2*i+1] = LOW_HEXTOSTRING(readBuf[IDX_PHONE_NUMBER + i]);
+						}
+						phonenumber[15] = 0;
+
+						//for (i = 0;i < 15;i ++) {
+						//	WatchInstance.u8PhoneBook[index-1][i] = phonenumber[i];
+						//}
+						strcpy(WatchInstance.u8PhoneBook[index-1],phonenumber);
+						ApolloWatchSave();
+					}
+					break;
+				}
+					
+				case COMMAND_SET_PHONENUMBER: {
+					int i = 0;
+					for (i = 0;i < 8;i ++) {
+						phonenumber[2*i] = HIGH_HEXTOSTRING(readBuf[IDX_PHONE_NUMBER + i]);
+						phonenumber[2*i+1] = LOW_HEXTOSTRING(readBuf[IDX_PHONE_NUMBER + i]);
+					}
+					phonenumber[15] = 0;
+					YxAppSendMsgToMMIMod(cmd, readBuf[IDX_PHONE_INDEX] - 1 + 0x30, 0);
+					break;
+				}
+
+				case COMMAND_BUZZER_DEVICE_OPEN: 
+				case COMMAND_BUZZER_DEVICE_CLOSE: 
+				case COMMAND_LIGHT1_DEVICE_OPEN:
+				case COMMAND_LIGHT1_DEVICE_CLOSE: 
+				case COMMAND_LIGHT2_DEVICE_OPEN: 
+				case COMMAND_LIGHT2_DEVICE_CLOSE: {
+					kal_prompt_trace(MOD_YXAPP," cmd:%x\n", cmd);
+					YxAppSendMsgToMMIMod(cmd, 0, 0); //send msg to queue
+					break;
+				}
+
+				case COMMAND_FREQ_SET: {
+					U8 index = readBuf[IDX_PHONE_INDEX];
+					WatchInstance.u8Freq = (char)index;
+					ApolloWatchSave();
+					break;
+				}
+			}
+			break;
+		default:
+			break;
 		}
 	}
-	return 0;//ÒÔÊµ¼ÊSENDBUFFERµÄ³¤¶È·µ»Ø
+	
+	return 1;
+#elif (APOLLO_PROTOCOL_VERSION == APOLLO_PROTOCOL_VERSION)
+
+#else
+	
+
 #endif
 }
 

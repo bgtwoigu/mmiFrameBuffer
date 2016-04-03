@@ -13,6 +13,362 @@
 extern "C"
 {
 #endif
+
+//-------------------------------------------------
+
+#define UART_LOG   0  //0:关闭串口1打印信息  1打开串口1打印信息
+
+//-------------------------------------------------
+
+//-----------------------timer---------------------
+
+#define LCD_TIMER     JMMS_ASYNC_SAVE_TIMER
+#define WIFI_TIMER    JMMS_ASYNC_PARSE_TIMER
+#define CALL_TIMER    JMMS_VIEW_PREVIEW_TIMER
+#define I2C_TIMER     JMMS_NO_COMM_TIMER_CHECK
+#define HAND_TIMER    JDD_TIMER_00
+
+//-----------------------timer---------------------
+
+//-----------------------uart----------------------
+
+typedef enum
+{
+	UART_FUNCTION_NONE = 0,
+	UART_FUNCTION_GPS,
+	UART_FUNCTION_WIFI,
+	UART_FUNCTION_BLE
+} UART_FUNCTION;
+
+typedef enum
+{
+	UART_STATUS_OFF = 0,
+	UART_STATUS_ON
+} UART_STATUS;
+
+extern void Uart1_ini(void);
+extern void Uart1_sends(U8 *buff,U16 len);
+extern void Uart2_ini(unsigned long n);
+extern void Uart2_open(unsigned long n);
+extern void Uart2_close(void);
+extern void Uart2_sends(U8 *buff,U16 len);
+
+//-----------------------uart----------------------
+
+//-----------------------display-------------------
+
+typedef enum
+{
+	LCD_SWITCH_ONOFF_STATUS_OFF = 0,
+	LCD_SWITCH_ONOFF_STATUS_ON
+} LCD_SWITCH_ONOFF_STATUS;
+
+extern void lcd_dis_on(void);
+extern void lcd_dis_off(void);
+extern void dis_ini(void);
+
+//-----------------------display-------------------
+
+//-----------------------key-----------------------
+
+extern void key_ini(void);
+extern void key_re_ini(void);
+
+//-----------------------key-----------------------
+
+//-----------------------gps-----------------------
+
+typedef enum
+{
+	GPS_SATELLITE_STATUS_NONE = 0,
+	GPS_SATELLITE_STATUS_EXIST
+} GPS_SATELLITE_STATUS;
+
+typedef enum
+{
+	GPS_DATA_STATUS_NONE = 0,
+	GPS_DATA_STATUS_OK
+} GPS_DATA_STATUS;
+
+extern unsigned char JW_value[10];
+
+extern void gps_start(void);
+extern void gps_end(void);
+extern void gps_ready(void);
+extern void gps_data_ready(void);
+extern GPS_SATELLITE_STATUS gps_get_satellite_status_flag(void);
+
+//-----------------------gps-----------------------
+
+typedef struct _LatLng {
+	double lat;
+	double lng;
+	double high;
+} LatLng;
+
+//-----------------------wifi----------------------
+
+typedef enum
+{
+	WIFI_DATA_STATUS_NONE = 0,
+	WIFI_DATA_STATUS_OK
+} WIFI_DATA_STATUS;
+
+extern unsigned char WIFI_mac_status ;
+extern unsigned int WIFI_mac_all_num ;
+extern unsigned char WIFI_mac1[7];//WIFI_mac1[0] : 信号强度，正数，大于零 数值越小，信号越强。
+extern unsigned char WIFI_mac2[7];
+extern unsigned char WIFI_mac3[7];
+extern unsigned char WIFI_mac4[7];
+
+extern void WIFI_start(void);
+extern void WIFI_end(void);
+extern WIFI_DATA_STATUS WIFI_get_status(void);
+extern void WIFI_data_ready(void);
+
+//-----------------------wifi----------------------
+
+//-----------------------ble-----------------------
+
+extern void ble_power_on(void);
+extern void ble_power_off(void);
+
+//-----------------------ble-----------------------
+
+//-----------------------lbs-----------------------
+
+typedef enum
+{
+	LBS_DATA_STATUS_NONE = 0,
+	LBS_DATA_STATUS_OK
+} LBS_DATA_STATUS;
+
+extern void lbs_start(void);
+extern void lbs_get_value(void);
+LBS_DATA_STATUS lbs_get_data_status_flag(void);
+	
+//-----------------------lbs-----------------------
+
+//-----------------------POWER---------------------
+
+extern void power_manage_ini(void);
+extern void VSIM2_ON(void);
+extern void VSIM2_OFF(void);
+extern void VCAMA_ON(void);
+extern void VCAMA_OFF(void);
+extern void VUSB_ON(void);
+extern void VUSB_OFF(void);
+extern void VMC_ON(void);
+extern void VMC_OFF(void);
+extern void VIBR_ON(void);
+extern void VIBR_OFF(void);
+
+//-----------------------POWER---------------------
+
+//-----------------------CALL----------------------
+
+typedef enum
+{
+	CALL_IN_STATUS_END = 0,//没有接入电话
+	CALL_IN_STATUS_INCOMING,//电话接入  铃声响  未接通
+	CALL_IN_STATUS_IN// 正在通话中
+} CALL_IN_STATUS;
+
+typedef enum
+{
+	CALL_OUT_STATUS_END = 0,
+	CALL_OUT_STATUS_START
+} CALL_OUT_STATUS;
+
+typedef enum
+{
+	CALL_IN_ALLOW_CONNECT_ALLOWED = 0,
+	CALL_IN_ALLOW_CONNECT_UNALLOWED
+} CALL_IN_ALLOW_CONNECT;
+
+typedef enum
+{
+	CALL_OUT_ALLOW_DISCONNECT_ALLOWED = 0,
+	CALL_OUT_ALLOW_DISCONNECT_UNALLOWED
+} CALL_OUT_ALLOW_DISCONNECT;
+
+typedef enum
+{
+	CALL_LISTEN_STATUS_OFF = 0,
+	CALL_LISTEN_STATUS_ON
+} CALL_LISTEN_STATUS;
+
+extern CALL_LISTEN_STATUS call_listen_status_flag;
+
+extern void CALL_incoming(void);
+extern void CALL_in(void);
+extern void CALL_out(void);
+extern void CALL_end(void);
+extern void CALL_incoming_connect(void);
+extern void CALL_incoming_disconnect(void);
+extern void CALL_in_disconnect(void);
+extern void CALL_outgoing_disconnect(void);
+extern CALL_IN_STATUS CALL_get_call_in_status_flag(void);
+extern CALL_OUT_STATUS CALL_get_call_out_status_flag(void);
+extern CALL_IN_ALLOW_CONNECT CALL_get_call_in_allow_connect_flag(void);
+extern CALL_OUT_ALLOW_DISCONNECT CALL_get_call_out_allow_disconnect(void);
+extern void CALL_listen_on(void);
+extern void CALL_listen_off(void);
+extern CALL_LISTEN_STATUS CALL_check_listen(void);
+extern void CALL_listen_start(void);
+
+//-----------------------CALL----------------------
+
+//---------------------------远程关机------------------------------
+
+extern void Shutdown_cmd(void);
+
+//---------------------------远程关机------------------------------
+
+//---------------------------找手表--------------------------------
+
+typedef enum
+{
+	SEARCH_WATCH_STATUS_START = 0,
+	SEARCH_WATCH_STATUS_END
+} SEARCH_WATCH_STATUS;
+
+extern SEARCH_WATCH_STATUS search_watch_status_flag;
+extern void start_search_watch(void);
+extern void stop_search_watch(void);
+
+//---------------------------找手表--------------------------------
+
+//---------------------------查话费--------------------------------
+
+extern unsigned char iphone_number_for_sms[20];
+extern void SmsSend_to_phone(U16 *p);
+extern void Telephone_Bill_Enquiry(unsigned char *phone_num);
+
+//---------------------------查话费--------------------------------
+
+//---------------------------拒绝陌生人来电------------------------
+
+typedef enum
+{
+	REFUSED_TO_STRANGER_CALLS_STATUS_OFF = 0,
+	REFUSED_TO_STRANGER_CALLS_STATUS_ON 
+} REFUSED_TO_STRANGER_CALLS_STATUS;
+
+extern REFUSED_TO_STRANGER_CALLS_STATUS refused_to_stranger_calls_status_flag;
+
+//拒绝陌生人来电
+extern void CALL_refused_to_stranger_calls_on(void);
+//允许陌生人来电
+extern void CALL_refused_to_stranger_calls_off(void);
+
+//---------------------------拒绝陌生人来电------------------------
+
+//---------------------------来电自动接听--------------------------
+
+typedef enum
+{
+	CALL_AUTOMATIC_ANSWERING_STATUS_OFF = 0,
+	CALL_AUTOMATIC_ANSWERING_STATUS_ON
+} CALL_AUTOMATIC_ANSWERING_STATUS;
+
+extern CALL_AUTOMATIC_ANSWERING_STATUS call_automatic_answering_status_flag;
+
+extern void CALL_automatic_answering_status_on(void);
+extern void CALL_automatic_answering_status_off(void);
+
+//---------------------------来电自动接听--------------------------
+
+//---------------------------静音模式------------------------------
+
+typedef enum
+{
+	MUTE_MODE_STATUS_OFF = 0,
+	MUTE_MODE_STATUS_ON
+} MUTE_MODE_STATUS;
+
+extern void mute_mode_open(void);
+extern void mute_mode_close(void);
+extern MUTE_MODE_STATUS mute_mode_get_status(void);
+
+//---------------------------静音模式------------------------------
+
+//---------------------------I2C-----------------------------------
+
+typedef enum
+{
+	APDS9901_STATUS_NOT_LOOSE = 0,
+	APDS9901_STATUS_LOOSE,
+	APDS9901_STATUS_ERROR
+} APDS9901_STATUS;
+
+extern unsigned int Step_num;
+
+extern void I2C_initialization(void);
+extern void I2C_APDS9901_ini(unsigned char step);
+extern void I2C_APDS9901_read_data(void);
+extern void  I2C_APDS9901_START(void);
+extern void I2C_APDS9901_TASK1(void);
+extern void I2C_APDS9901_TASK2(void);
+extern void I2C_APDS9901_TASK3(void);
+extern APDS9901_STATUS I2C_APDS9901_GET_STATUS(void);	
+
+extern void BMA250E_initialization(void);
+extern void BMA250E_READ_DATA(kal_int16 *X, kal_int16 *Y, kal_int16 *Z, unsigned char *p);
+extern void BMA250E_task_ini(void);
+
+//---------------------------I2C-----------------------------------
+
+//---------------------------摇一摇接通----------------------------
+
+extern void yaoyiyao_ini(void);
+extern void yaoyiyao_open(void);
+extern void yaoyiyao_close(void);
+
+//---------------------------摇一摇接通----------------------------
+
+//---------------------------抬手显示------------------------------
+
+typedef enum
+{
+	FLAT_STATUS_OFF =0,
+	FLAT_STATUS_ON
+} FLAT_STATUS;
+
+extern FLAT_STATUS flat_status_new;
+extern FLAT_STATUS flat_status_old;
+
+typedef enum
+{
+	HAND_STATUS_NO_CHANGE = 0,
+	HAND_STATUS_CHANGE
+} HAND_STATUS;
+
+typedef enum
+{
+	HAND_SCREEN_STATUS_OFF = 0,
+	HAND_SCREEN_STATUS_ON
+} HAND_SCREEN_STATUS;
+
+extern HAND_STATUS hand_status_flag;
+extern HAND_SCREEN_STATUS hand_screen_status_flag;
+extern FLAT_STATUS flat_status_tep;
+extern void hand_mode_ini(void);
+extern void hand_mode_open(void);
+extern void hand_mode_close(void);
+
+extern unsigned char flag_hand;
+//---------------------------抬手显示------------------------------
+
+//---------------------------motor---------------------------------
+
+extern void motor_en(void);
+extern void motor_disen(void);
+
+//---------------------------motor---------------------------------
+
+
+
 /***************************************************具体根据你们的需要修改相关宏**************************************************/
 //debug
 #define  YX_IS_TEST_VERSION          0               //是否是测试版本,0:量产版本,1:串口1调试并打印输出,2:USB调试并打印输出,USB打印时
@@ -33,32 +389,38 @@ extern "C"
                                                      //NET方式就不是通过代理上,是直接可以连接服务器的,没有端口限制
 #define  YX_HOST_NAME_MAX_LEN        40              //域名最大字符数
 
-#if 0//需要更改成你们的服务器IP与端口
-#define  YX_DOMAIN_NAME_DEFAULT      "192.168.1.1" //服务器域名或是ip地址,如:192.186.1.1
-#define  YX_SERVER_PORT              5088            //服务器port,如果是HTTP服务器,端口默认为80,如果是通过CMWAP方式上网,则只能用HTTP服务器,并且端口一定要为80
+#if 1//需要更改成你们的服务器IP与端口
+#define  YX_DOMAIN_NAME_DEFAULT      "120.76.25.198" //服务器域名或是ip地址,如:192.186.1.1
+#define  YX_SERVER_PORT              8880            //服务器port,如果是HTTP服务器,端口默认为80,如果是通过CMWAP方式上网,则只能用HTTP服务器,并且端口一定要为80
+#define  APOLLO_BURNKEY_SERVER_IP		"120.76.25.198"
+#define  APOLLO_BURNKEY_SERVER_PORT	 5555
 #else
 #define  YX_DOMAIN_NAME_DEFAULT      "www.163.com" //服务器域名或是ip地址,如:192.186.1.1
 #define  YX_SERVER_PORT              80            //服务器port,如果是HTTP服务器,端口默认为80,如果是通过CMWAP方式上网,则只能用HTTP服务器,并且端口一定要为80
 #endif
-#define  YX_CONN_SERVER_TIME_OUT     60000           //SOCKET read write time out,second
+#define  YX_CONN_SERVER_TIME_OUT     50000           //SOCKET read write time out,second
 #define  YX_MIN_UPLOAD_TIME          1               //心跳包时间间隔,秒为单位,默认为15秒,系统秒的计时是以每15秒一个TICK
+#define  YX_HEAT_TIME_MIN            1               //最小心跳包间隔
+#define  YX_HEAT_TIME_MAX            10              //最大心跳包间隔
 #define  YX_GPS_UPLOAD_TIME          20              //定位包上传间隔,分钟为单位,默认为20分钟
+#define  YX_GPS_TIME_MIN             5               //定位包最小时间间隔
+#define  YX_GPS_TIME_MAX             60              //定位包最大时间间隔
 #define  YX_GPRS_RECONNECT_COUNT     3               //当与服务器通讯中断或没连接到服务器时，最大重新连接次数
 #define  YX_GPS_CONVERT_DM2DD        1               //需要不需要把GPS的坐标DDMMMMMM转成DDDDDD,1:需要,0:不需要
 
 #define  YX_GPS_DISPLAY_UI           0               //是否显示GPS图标,0:不显示
 #define  YX_GPS_USE_AGPS             1               //是否支持AGPS,0:不支持
-#define  YX_GSENSOR_SURPPORT         0               //GSENSOR,1:采用中断方式,2:TIMER方式,0:不支持
+#define  YX_GSENSOR_SURPPORT         2               //GSENSOR,1:采用中断方式,2:TIMER方式,0:不支持
 #define  YX_PROTOCOL_KIND            1               //通讯协议种类,
 #define  YX_NO_SIMCARD_GET_DATA      1               //没有插入SIM卡时,同样采集数据并保存起来,等有卡时,再上传到服务器,1:支持,0:不支持
 #define  YX_SMS_CMD_DONT_USE         1               //不需要短信指令
 #define  YX_SECOND_TICK_WAY          2               //秒的计时方式,1:为stack_timer,2:starttimer
 #if(YX_GPS_USE_AGPS==1)
-#define  YX_GPS_SAMPLE_DATA_TIME     20              //GPS采集坐标最长时间,20秒
+#define  YX_GPS_SAMPLE_DATA_TIME     30              //GPS采集坐标最长时间,30秒
 #else
 #define  YX_GPS_SAMPLE_DATA_TIME     50              //GPS采集坐标最长时间,50秒
 #endif
-#define  YX_HEART_TICK_UNIT          10000           /**心跳包每10秒计一次单位*/
+#define  YX_HEART_TICK_UNIT          5000           /**心跳包每10秒计一次单位*/
 /***************************************************以下部分的宏定义不需要去改动**************************************************/
 
 #define  YX_APP_MAX_CELL_INFOR_NUM   6               //最大基站数,MTK最大为6,不要更改
@@ -107,19 +469,27 @@ extern "C"
 #define ENABLE_MMI_KEYPAD			ENABLE
 #define ENABLE_MMI_WATCHCONF		ENABLE
 
+#define APOLLO_ODM_AOXIN_OLDMAN_WATCH			0x00
+#define APOLLO_ODM_AOXIN_SMART_WATCH			0x01
+#define APOLLO_ODM_LAOYING_POSITION				0x02
+#define APOLLO_SMART_WATCH						0xA0
+#define APOLLO_PROTOCOL_VERSION		APOLLO_ODM_AOXIN_OLDMAN_WATCH
 
 //msg command kind    
-#define  YX_MSG_BLUETOOTH_CTRL       1
-#define  YX_MSG_WLAN_POWER_CTRL      2 //1:power on and scan,0:power off
-#define  YX_MSG_LBS_CELL_CTRL        3 //1:get cell infors,0:cancel
-#define  YX_MSG_CALL_CTRL            4 //1:make call,0 cancel
-#define  YX_MSG_SMS_CTRL             5
-#define  YX_MSG_GPRS_CTRL            6
-#define  YX_MSG_MAINAPP_TICK_CTRL    7 //分钟TICK
-#define  YX_MSG_MAINAPP_SECOND_CTRL  8 //秒钟TICK
-#define  YX_MSG_START_POS_CTRL       9 //立即定位
+#define  YX_MSG_BLUETOOTH_CTRL       0xB1
+#define  YX_MSG_WLAN_POWER_CTRL      0xB2 //1:power on and scan,0:power off
+#define  YX_MSG_LBS_CELL_CTRL        0xB3 //1:get cell infors,0:cancel
+#define  YX_MSG_CALL_CTRL            0xB4 //1:make call,0 cancel
+#define  YX_MSG_SMS_CTRL             0xB5
+#define  YX_MSG_GPRS_CTRL            0xB6
+#define  YX_MSG_MAINAPP_TICK_CTRL    0xB7 //分钟TICK
+#define  YX_MSG_MAINAPP_SECOND_CTRL  0xB8 //秒钟TICK
+#define  YX_MSG_START_POS_CTRL       0xB9 //立即定位
+
 #ifndef APOLLO_KEY //Update By WangBoJing 20150915
 #define APOLLO_KEY
+
+
 
 #define APOLLO_UPKEY_EVENT_SINGLE_UP			0x0A
 #define APOLLO_UPKEY_EVENT_SINGLE_DOWN		0x0B
@@ -437,7 +807,7 @@ typedef struct
 #define  YX_UPLOAD_KIND_HEART        0x01  //心跳包
 #define  YX_UPLOAD_KIND_GPS          0x02  //定位包
 #define YX_UPLOAD_KIND_VOICE		0x03
-#define YX_DOWNLOAD_KIND_VOICE		0x04
+#define YX_DOWNLOAD_KIND_VOICE	0x04
 
 typedef struct
 {
@@ -514,7 +884,7 @@ typedef struct
 	kal_uint16   value;//efence的序号,or,低电量的值or语音监听的号码值,固定为4位,不足补0
 }YXLOGPARAM;
 
-#if ENABLE_MMI_WATCHCONF
+
 typedef struct _WATCHCONF {
 	char u8StepFlag;
 	char u8SleepFlag;
@@ -527,7 +897,8 @@ typedef struct _WATCHCONF {
 	char u8ContactNumber[CONTACT_NUMBER_SIZE][PHONE_NUMBER_LENGTH];
 	char u8PhoneBook[PHONE_BOOK_SIZE][PHONE_NUMBER_LENGTH];
 } WatchConf;
-#endif
+
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //basic api
@@ -541,6 +912,7 @@ extern void YxAppGetImeiNumber(void);
 extern U8 YxAppGetSignalLevelInPercent(void);
 extern U8 YxAppBatteryLevel(void);
 extern void YxAppGetSystemDateTimeStr(char *strBuf);//buf len need 20
+extern S32 YxAppUCSStrlen(U16 *string);
 extern void YxAppMMiRegisterMsg(void);
 
 //gps uart api
