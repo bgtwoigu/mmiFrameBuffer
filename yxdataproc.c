@@ -122,6 +122,10 @@ extern void YxAppSendSmsIntenal(S8* number,char gsmCode,U16* content);//ucs2
 
 ////////////////////////////////////////////////////////////Call call cb///////////////////////////////////////////////////////////////////
 extern void CALL_incoming(void);
+extern U8 mmiKeyPadIsExistPhoneNumber(char *u8PhoneNumber);
+extern void mmi_ucm_incoming_call_sendkey(void);
+
+
 kal_bool YxAppCallNumberIsAllowed(char callType,S8 *number)//callType:1:À´µç.ºÅÂëÎªASCIIÂë,·µ»ØTRUE:ÔÊÐí,FASE:½ûÖ¹
 {
 	YXMONITORPARAM    *numList = NULL;
@@ -133,6 +137,7 @@ kal_bool YxAppCallNumberIsAllowed(char callType,S8 *number)//callType:1:À´µç.ºÅÂ
 	YxAppTestUartSendData((U8*)logBuf,strlen(logBuf));
 #endif
 
+#if 0
 	if( refused_to_stranger_calls_status_flag == REFUSED_TO_STRANGER_CALLS_STATUS_ON )
 	{
 		unsigned char i=0;
@@ -170,12 +175,25 @@ kal_bool YxAppCallNumberIsAllowed(char callType,S8 *number)//callType:1:À´µç.ºÅÂ
 		}
 		return KAL_TRUE;
 	}
-	
+#else
+	kal_prompt_trace(MOD_YXAPP, "YxAppCallNumberIsAllowed : %s\n", number);
+
+	if (strlen(number) <= 1) { //À´µçÏÔÊ¾,Ã»ÓÐ¿ªÍ¨
+		StartTimer(CALL_TIMER, 10000, mmi_ucm_incoming_call_sendkey);
+		return KAL_TRUE;
+	} else if (mmiKeyPadIsExistPhoneNumber(number)) {
+		StartTimer(CALL_TIMER, 10000, mmi_ucm_incoming_call_sendkey);
+		return KAL_TRUE;
+	} else {
+		return KAL_FALSE;
+	}
+#endif
 }
 
 void YxAppEndCallCb(void)//when call is released,it calls this cb
 {
-	//YxAppCallEndProc();
+	kal_prompt_trace(MOD_YXAPP, "YxAppEndCallCb\n");
+	YxAppCallEndProc();
 }
 
 ////////////////////////////////////////////////////////////gprs data proc///////////////////////////////////////////////////////////////////

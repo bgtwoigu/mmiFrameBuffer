@@ -63,16 +63,16 @@ typedef enum
 	LCD_SWITCH_ONOFF_STATUS_ON
 } LCD_SWITCH_ONOFF_STATUS;
 
-extern void lcd_dis_on(void);
-extern void lcd_dis_off(void);
-extern void dis_ini(void);
+//extern void lcd_dis_on(void);
+//extern void lcd_dis_off(void);
+//extern void dis_ini(void);
 
 //-----------------------display-------------------
 
 //-----------------------key-----------------------
 
-extern void key_ini(void);
-extern void key_re_ini(void);
+//extern void key_ini(void);
+//extern void key_re_ini(void);
 
 //-----------------------key-----------------------
 

@@ -253,6 +253,17 @@ static void YxMMIProcTimerMsgHdler(void *msg)
 }
 #endif
 
+#if 1 //extern function define
+extern void ApolloAppSetRunFlag(U16 flag);
+extern void ApolloAppSetPacketTimes(U8 u8Times);
+
+static char YxAppMakeCall(char check,char *number);
+void YxAppCircyleCallInit(void);
+S8 YxAppMakeWithCallType(S8 callType,S8 *number);
+
+
+#endif
+
 #if 1 //Save Watch Configure
 
 
@@ -453,31 +464,32 @@ int ApolloWatchConfig(void) {
 		WatchStatusConfig();
 	} else {
 		memset(&WatchInstance, 0, sizeof(WatchConf));
-#if 1
-		strcpy(WatchInstance.u8FamilyNumber[0], "18874180429");
-		strcpy(WatchInstance.u8FamilyNumber[1], "18874181234");
+
+		strcpy(WatchInstance.u8FamilyNumber[0], "18874187429");
+		strcpy(WatchInstance.u8FamilyNumber[1], "15889650380");
 		
-		strcpy(WatchInstance.u8ContactNumber[0], "18814187429");
-		strcpy(WatchInstance.u8ContactNumber[1], "18824181234");
-		strcpy(WatchInstance.u8ContactNumber[2], "18834187429");
-		strcpy(WatchInstance.u8ContactNumber[3], "18844181234");
-		strcpy(WatchInstance.u8ContactNumber[4], "18854187429");
+		strcpy(WatchInstance.u8ContactNumber[0], "15889650380");
+		strcpy(WatchInstance.u8ContactNumber[1], "15889650380");
+		strcpy(WatchInstance.u8ContactNumber[2], "15889650380");
+		strcpy(WatchInstance.u8ContactNumber[3], "15889650380");
+		strcpy(WatchInstance.u8ContactNumber[4], "15889650380");
 		strcpy(WatchInstance.u8ContactNumber[5], "18864181234");
-		strcpy(WatchInstance.u8ContactNumber[6], "18874187429");
+		strcpy(WatchInstance.u8ContactNumber[6], "18804187429");
 		strcpy(WatchInstance.u8ContactNumber[7], "18884181234");
 		strcpy(WatchInstance.u8ContactNumber[8], "18894187429");
 		strcpy(WatchInstance.u8ContactNumber[9], "18804181234");
 
-		strcpy(WatchInstance.u8PhoneBook[0], "18114187429");
-		strcpy(WatchInstance.u8PhoneBook[1], "18224181234");
-		strcpy(WatchInstance.u8PhoneBook[2], "18334187429");
-		strcpy(WatchInstance.u8PhoneBook[3], "18444181234");
-		strcpy(WatchInstance.u8PhoneBook[4], "18554187429");
-		strcpy(WatchInstance.u8PhoneBook[5], "18664181234");
-		strcpy(WatchInstance.u8PhoneBook[6], "18774187429");
-		strcpy(WatchInstance.u8PhoneBook[7], "18884181234");
-		strcpy(WatchInstance.u8PhoneBook[8], "18994187429");
-		strcpy(WatchInstance.u8PhoneBook[9], "18004181234");
+#if 0
+		strcpy(WatchInstance.u8PhoneBook[0], "15889650380");
+		strcpy(WatchInstance.u8PhoneBook[1], "15889650380");
+		strcpy(WatchInstance.u8PhoneBook[2], "15889650380");
+		strcpy(WatchInstance.u8PhoneBook[3], "15889650380");
+		strcpy(WatchInstance.u8PhoneBook[4], "15889650380");
+		strcpy(WatchInstance.u8PhoneBook[5], "15889650380");
+		strcpy(WatchInstance.u8PhoneBook[6], "15889650380");
+		strcpy(WatchInstance.u8PhoneBook[7], "15889650380");
+		strcpy(WatchInstance.u8PhoneBook[8], "15889650380");
+		strcpy(WatchInstance.u8PhoneBook[9], "15889650380");
 #endif
 	}
 	return 0;
@@ -990,12 +1002,12 @@ void mmiFrameBufferCallOutFontDisplay(void) {
 
 void mmiFrameBufferCallOutDisplay(void) {
 	mmiFrameBufferClearDisplay();
-	mmiFrameBufferCallOutFontDisplay();
+	//mmiFrameBufferCallOutFontDisplay();
 
-	mmiFrameBufferScrollDisplayData(0, 60, "12345687234", strlen("12345687234"));
+	//mmiFrameBufferScrollDisplayData(0, 60, u8ContactPhoneBook, strlen(u8ContactPhoneBook));
 	
-	bStatusProcessDynDisplay = 1;
-	StartTimer(APOLLO_MMI_FRAMEBUFFER_STATUSPROCESS_TIMER, 500, mmiFrameBufferStatusProcessDisplay);
+	//bStatusProcessDynDisplay = 1;
+	//StartTimer(APOLLO_MMI_FRAMEBUFFER_STATUSPROCESS_TIMER, 500, mmiFrameBufferStatusProcessDisplay);
 }
 
 /* ** **** ******** **************** CallIn **************** ******** **** ** */
@@ -1009,8 +1021,8 @@ void mmiFrameBufferCallInDisplay(void) {
 	mmiFrameBufferClearDisplay();
 	mmiFrameBufferCallInFontDisplay();
 
-	bStatusProcessDynDisplay = 1;
-	StartTimer(APOLLO_MMI_FRAMEBUFFER_STATUSPROCESS_TIMER, 500, mmiFrameBufferStatusProcessDisplay);
+	//bStatusProcessDynDisplay = 1;
+	//StartTimer(APOLLO_MMI_FRAMEBUFFER_STATUSPROCESS_TIMER, 500, mmiFrameBufferStatusProcessDisplay);
 }
 
 /* ** **** ******** **************** FallDown **************** ******** **** ** */
@@ -1135,6 +1147,14 @@ void mmiKeyPadEventDownKeyB(void) {
 	
 		u8LcdUiStatusIndex = LCD_UI_STATUS_MAIN_MENU;
 		mmiFrameBufferReflush();
+	} else if (u8LcdUiStatusIndex == LCD_UI_STATUS_CALLOUT) {
+		memset(u8ContactPhoneBook, 0, PHONE_NUMBER_LENGTH);
+		u8PhoneBookIndex = -1;
+	
+		u8LcdUiStatusIndex = LCD_UI_STATUS_MAIN_MENU;
+		mmiFrameBufferReflush();
+
+		mmi_ucm_outgoing_call_endkey();
 	}
 }
 
@@ -1145,7 +1165,7 @@ void mmiKeyPadEventUpKeyB(void) {
 U8 mmiKeyPadFindNextPhoneBookNumber(void) {
 	U8 i = 0;
 	for (i = u8PhoneBookIndex+1;i < PHONE_BOOK_SIZE;i ++) {
-		if (strlen(WatchInstance.u8ContactNumber[i]) > 6) {
+		if (strlen(WatchInstance.u8PhoneBook[i]) > 6) {
 			memset(u8ContactPhoneBook, 0, PHONE_NUMBER_LENGTH);
 			
 			strcpy(u8ContactPhoneBook, WatchInstance.u8PhoneBook[i]);
@@ -1161,10 +1181,42 @@ U8 mmiKeyPadFindNextPhoneBookNumber(void) {
 	return 0;
 }
 
+U8 mmiKeyPadIsExistPhoneNumber(char *u8PhoneNumber) {
+	U8 i = 0;
+#if 0
+	for (i = 0;i < FAMILY_NUMBER_SIZE;i ++) {
+		if (!strstr(WatchInstance.u8FamilyNumber[i], u8PhoneNumber)) {
+			return 1;
+		}
+	}
+
+	for (i = 0;i < CONTACT_NUMBER_SIZE;i ++) {
+		if (!strstr(WatchInstance.u8ContactNumber[i], u8PhoneNumber)) {
+			return 1;
+		}
+	}
+#endif
+	for (i = 0;i < CONTACT_NUMBER_SIZE;i ++) {
+		if (strstr(WatchInstance.u8ContactNumber[i], u8PhoneNumber)) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 void mmiKeyPadEventDownKeyA(void) {
+	
+}
+
+void mmiKeyPadEventUpKeyA(void) {
 	U8 bExist = 0;
 	if (u8LcdUiStatusIndex == LCD_UI_STATUS_MAIN_MENU) {
 		bExist = mmiKeyPadFindNextPhoneBookNumber();
+		if (!bExist) {
+			mmi_phb_popup_display_ext(STR_ID_PHB_NO_ENTRY_TO_SELECT,MMI_EVENT_FAILURE);
+			return ;
+		}
 		u8LcdUiStatusIndex = LCD_UI_STATUS_CONTACT;
 		mmiFrameBufferReflush();
 	} else if (u8LcdUiStatusIndex == LCD_UI_STATUS_CONTACT) {
@@ -1176,15 +1228,19 @@ void mmiKeyPadEventDownKeyA(void) {
 			u8LcdUiStatusIndex = LCD_UI_STATUS_MAIN_MENU;
 			mmiFrameBufferReflush();
 		}
+	} else if (u8LcdUiStatusIndex == LCD_UI_STATUS_CALLIN) {
+		StopTimer(CALL_TIMER);
+		mmi_ucm_incoming_call_sendkey();
 	}
 }
 
-void mmiKeyPadEventUpKeyA(void) {
-	
-}
-
 void mmiKeyPadEventLongPressKeyA(void) {
-	
+	if (u8LcdUiStatusIndex == LCD_UI_STATUS_CONTACT) {
+		u8LcdUiStatusIndex = LCD_UI_STATUS_CALLOUT;
+		mmiFrameBufferReflush();
+		
+		YxAppMakeCall(0,u8ContactPhoneBook);
+	}
 }
 
 void mmiKeyPadEventRepeatKeyA(void) {
@@ -1205,6 +1261,9 @@ void mmiKeyPadEventLongPressKeyC(void) {
 	//mmiFrameBufferSOSDisplay();
 	u8LcdUiStatusIndex = LCD_UI_STATUS_SOS;
 	mmiFrameBufferReflush();
+
+	YxAppCircyleCallInit();
+	YxAppMakeWithCallType(2,NULL);
 }
 
 void mmiKeyPadEventRepeatKeyC(void) {
@@ -2965,13 +3024,16 @@ void YxAppCircyleCallInit(void)
 
 S8 YxAppMakeWithCallType(S8 callType,S8 *number)
 {
+#if 0
 	if((number==NULL)&&(YxAppGetNumberItem(0xFF,NULL,NULL)==0))
 	{
 		mmi_phb_popup_display_ext(STR_ID_PHB_NO_ENTRY_TO_SELECT,MMI_EVENT_FAILURE);
 		return 0;
 	}
+#endif
 	if(callType==YX_CALL_CIRCYLE)
 	{
+	#if 0
 		S8   i = 0,j = 0;
 		if(yxCallParam.callKind==YX_CALL_CIRCYLE)
 			return 0;
@@ -2986,6 +3048,12 @@ S8 YxAppMakeWithCallType(S8 callType,S8 *number)
 		yxCallParam.callKind = callType;
 		YxAppLogAdd(LOG_CALL,'0',0);
 		return YxAppMakeCall(0,yxCallParam.yxMonitors[0].number);
+	#else
+		if(yxCallParam.callKind==YX_CALL_CIRCYLE)
+			return 0;
+		yxCallParam.callKind = callType;
+		return YxAppMakeCall(0, WatchInstance.u8FamilyNumber[yxCallParam.callIndex]);
+	#endif
 	}
 	else if(callType==YX_CALL_SEND1)
 	{
@@ -3062,6 +3130,7 @@ void YxAppCallEndProc(void)
 	}
 	else if(yxCallParam.callKind==YX_CALL_CIRCYLE)
 	{
+	#if 0
 		char isEnd = 1;
 		yxCallParam.callIndex++;
 		if(yxCallParam.callIndex<YX_MAX_MONITOR_NUM)
@@ -3074,6 +3143,16 @@ void YxAppCallEndProc(void)
 			yxCallParam.callIndex = 0;
 			yxCallParam.callKind = YX_CALL_NORMAL;
 		}
+	#else
+		char isEnd = 1;
+		yxCallParam.callIndex++;
+		if(yxCallParam.callIndex < FAMILY_NUMBER_SIZE) {
+			YxAppMakeCall(0, WatchInstance.u8FamilyNumber[yxCallParam.callIndex]);
+ 		} else {
+			yxCallParam.callIndex = 0;
+			yxCallParam.callKind = YX_CALL_NORMAL;
+		}
+	#endif
 		return;
 	}
 }
@@ -5633,7 +5712,7 @@ void YxAppSetAllowShutdown(void)
 
 char YxAppCheckAllowShutDown(void)
 {
-	lcd_dis_on();
+	//lcd_dis_on();
 
 	if(srv_nw_usab_is_usable(MMI_SIM1))
 	{
@@ -6148,7 +6227,11 @@ typedef enum
 
 LCD_UI_STATUS lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU;
 #endif
+
+
+#if 0
 LCD_SWITCH_ONOFF_STATUS lcd_switch_onoff_status_flag = LCD_SWITCH_ONOFF_STATUS_ON;
+
 
 unsigned char dis_onoff_flag=1;
 
@@ -6841,7 +6924,7 @@ void lcd_refresh(void)
 				//wgui_status_icon_bar_change_icon_level(STATUS_ICON_BATTERY_STRENGTH, 33);
 				//wgui_status_icon_bar_change_icon_level(STATUS_ICON_SUBLCD_BATTERY_STRENGTH, 33);
 
-				key_ini();
+				//key_ini();
 				
 			break;
 		case LCD_UI_STATUS_MAIN_MENU1: 
@@ -6906,7 +6989,7 @@ void lcd_refresh(void)
 	gdi_layer_blt_previous(0, 0, 64 - 1, 128 - 1);//刷整个屏幕
 	lcd_dis_off();
 
-	key_ini();
+	//key_ini();
 	
 	StartTimer(LCD_TIMER,200,lcd_refresh);//继续刷
 	
@@ -6934,28 +7017,6 @@ KEY_LONG_PRESS_STATUS key_long_press_status_flag = KEY_LONG_STATUS_UNHAPPEN;
 void key_power_KEY_EVENT_DOWN_interrupt(void)
 {
 	
-}
-
-static int a_count = 0;
-
-void VMC_ON(void)
-{
-	DRV_SetData(0xA07001C0,0x473,0x443);//
-}
-
-void VMC_OFF(void)
-{
-	DRV_SetData(0xA07001C0,0x473,0x2);//
-}
-
-void VIBR_ON(void)
-{
-	DRV_SetData(0xA07001B0,0x433,0x433);//
-}
-
-void VIBR_OFF(void)
-{
-	DRV_SetData(0xA07001B0,0x433,0x002);//
 }
 
 void key_power_KEY_EVENT_UP_interrupt(void)
@@ -7036,6 +7097,7 @@ void key_power_KEY_EVENT_UP_interrupt(void)
 	}
 #endif
 }
+#endif
 
 U8 u8RecorderCounter = 0;
 
@@ -7044,6 +7106,30 @@ void ApolloRecordTimerCounter(void){
 	StartTimer(APOLLO_RECORDER_TIMECOUNT_TIMER, 1000, ApolloRecordTimerCounter);
 }
 
+//static int a_count = 0;
+
+void VMC_ON(void)
+{
+	DRV_SetData(0xA07001C0,0x473,0x443);//
+}
+
+void VMC_OFF(void)
+{
+	DRV_SetData(0xA07001C0,0x473,0x2);//
+}
+
+void VIBR_ON(void)
+{
+	DRV_SetData(0xA07001B0,0x433,0x433);//
+}
+
+void VIBR_OFF(void)
+{
+	DRV_SetData(0xA07001B0,0x433,0x002);//
+}
+
+
+#if 0
 void key_1_KEY_EVENT_DOWN_interrupt(void)
 {
 	srv_gpio_setting_set_bl_time(10);
@@ -7575,7 +7661,7 @@ void key_ini(void)
 #endif
 
 }
-
+#endif
 //---------------------------key-----------------------------------
 
 
@@ -8637,7 +8723,7 @@ void CALL_incoming(void)
 	//  函数加到了YxAppCallNumberIsAllowed中，允许接通后 执行
 	 
 	//切换屏幕到电话接入状态
-	lcd_ui_status_flag = LCD_UI_STATUS_DAD;
+	//lcd_ui_status_flag = LCD_UI_STATUS_DAD;
 	
 	//处于接通状态
 	call_in_status_flag = CALL_IN_STATUS_INCOMING;
