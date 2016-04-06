@@ -302,7 +302,7 @@ typedef enum
 	APDS9901_STATUS_ERROR
 } APDS9901_STATUS;
 
-extern unsigned int Step_num;
+//extern unsigned int Step_num;
 
 extern void I2C_initialization(void);
 extern void I2C_APDS9901_ini(unsigned char step);
@@ -371,7 +371,7 @@ extern void motor_disen(void);
 
 /***************************************************具体根据你们的需要修改相关宏**************************************************/
 //debug
-#define  YX_IS_TEST_VERSION          0               //是否是测试版本,0:量产版本,1:串口1调试并打印输出,2:USB调试并打印输出,USB打印时
+#define  YX_IS_TEST_VERSION          2               //是否是测试版本,0:量产版本,1:串口1调试并打印输出,2:USB调试并打印输出,USB打印时
                                                      //电脑端工具要用catcher,同时代码里custom\common\hal\nvram\nvram_data_items.c
                                                      //中static port_setting_struct const NVRAM_EF_PORT_SETTING_DEFAULT[]数组里,tst-ps uses uart_port_null(value is 99),99改为4即可
                                                      //在catcher的FILLTER里选只一个MOD即MOD_BT就可以看到我们的打印输出信息
@@ -579,7 +579,7 @@ extern void motor_disen(void);
 #define APOLLO_MSG_SERIALPORT_RECV			0x94
 
 #define APOLLO_BURN_KEY_MSG					0xA0
-
+#define APOLLO_MSG_FALLDOWN					0xA1
 
 
 #define APOLLO_MSG_BUZZER_DEVICE_OPEN		0x81

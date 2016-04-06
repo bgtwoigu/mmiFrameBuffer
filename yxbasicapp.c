@@ -261,6 +261,27 @@ static char YxAppMakeCall(char check,char *number);
 void YxAppCircyleCallInit(void);
 S8 YxAppMakeWithCallType(S8 callType,S8 *number);
 
+extern int MD5_checksum(unsigned char *input, unsigned char *output, S32 length);
+extern int apollo_init_aes_ctx(void) ;
+extern void apollo_encrypt(unsigned char input[], unsigned char output[]) ;
+extern void apollo_decrypt(unsigned char input[], unsigned char output[]);
+extern void Apollo_set_burnkey(U8 *sendBuf, U8 *key);
+
+extern U8 phonenumber[20];
+extern U32 getSecondOff(void);
+
+#endif
+
+#if 1
+
+U8 apollo_key_buf[12] = {0};
+U8 recv_apollo_key[20] = {0};
+U8 apollo_key_ready = 0; //0 download key, 1 key ready
+U8 sos_key = 0; //press sos key
+U8 diedao_key = 0; 
+U32 step_num = 0;
+U32 sleep_quality = 0;
+//unsigned int Step_num = 0;
 
 #endif
 
@@ -940,9 +961,11 @@ void mmiFrameBufferCountStepDataDisplay(U32 u32Data) {
 
 void mmiFrameBufferCountStepDisplay(void) {
 	mmiFrameBufferClearDisplay();
-	
+#if 1
+	step_num = 54323;
+#endif
 	mmiFrameBufferCountStepIconDisplay();
-	mmiFrameBufferCountStepDataDisplay((U32) 123456);
+	mmiFrameBufferCountStepDataDisplay(step_num);
 
 	gdi_layer_blt_previous(0, 0, MMI_FRAMEBUFFER_PANEL_WIDTH, MMI_FRAMEBUFFER_PANEL_HIGH);
 }
@@ -1254,7 +1277,7 @@ void mmiKeyPadEventDownKeyC(void) {
 }
 
 void mmiKeyPadEventUpKeyC(void) {
-	
+	sos_key = 0; //clear flag
 }
 
 void mmiKeyPadEventLongPressKeyC(void) {
@@ -1264,6 +1287,8 @@ void mmiKeyPadEventLongPressKeyC(void) {
 
 	YxAppCircyleCallInit();
 	YxAppMakeWithCallType(2,NULL);
+
+	sos_key = 1;
 }
 
 void mmiKeyPadEventRepeatKeyC(void) {
@@ -1603,24 +1628,6 @@ void Apollo_audio_recv_data(void) {
 	mdi_audio_play_file((void*) path, DEVICE_AUDIO_PLAY_ONCE, NULL, NULL, NULL);
 	ApolloAppSetRunFlag(YX_RUNKIND_OWNER_HEART);
 }
-
-extern int MD5_checksum(unsigned char *input, unsigned char *output, S32 length);
-extern int apollo_init_aes_ctx(void) ;
-extern void apollo_encrypt(unsigned char input[], unsigned char output[]) ;
-extern void apollo_decrypt(unsigned char input[], unsigned char output[]);
-extern void Apollo_set_burnkey(U8 *sendBuf, U8 *key);
-
-
-U8 apollo_key_buf[12] = {0};
-U8 recv_apollo_key[20] = {0};
-U8 apollo_key_ready = 0; //0 download key, 1 key ready
-U8 sos_key = 0; //press sos key
-U8 diedao_key = 0; 
-U32 step_num = 0;
-U32 sleep_quality = 0;
-
-extern U8 phonenumber[20];
-extern U32 getSecondOff(void);
 
 S32 ApolloBlueToothRecv(U8 *sendBuf) {
 	U8 header[AMR_HANDLER_SIZE] = {'%'};
@@ -4384,7 +4391,7 @@ char YxAppSystemDtIsDefault(void)
 #define  YXAPP_UNSEND_FILENAME L"\\unsendfile.dat" //Î´ÉÏ´«¼ÇÂ¼°ü,ÓÐ¶àÌõ¼ÇÂ¼
 #define  YXAPP_TESTPRT_FILENAME L"\\testfile.dat" //AGPSÊý¾Ý
 #if (YX_GPS_USE_AGPS==1)
-#define  YXAPP_AGPS_FILENAME L"\\agpsfile.dat" //AGPSÊý¾Ý
+#define  YXAPP_AGPS_FILENAME L"\\agps.dat" //AGPSÊý¾Ý
 #endif
 
 static U8 YxAppGetFolderPath(PU8 pathbuf)
@@ -4651,8 +4658,8 @@ char YxAgpsDataWriteToIc(U8 *buffer,U16 DataLen)
 {
 	if(DataLen>20)
 	{
-		buffer += 8;
-		DataLen -= 8;
+		//buffer += 8;
+		//DataLen -= 8;
 		YxAppUartSendData(buffer,DataLen);//write to ic
 		return 1;
 	}
@@ -4666,10 +4673,11 @@ U16 YxAppGetAgpsData(kal_uint8 *data,U16 maxLen)//ÎÄ¼þÊý¾Ý¸ñÊ½:Ç°8¸öB´ú±íÔÂÈÕÊ±·
 	FS_HANDLE fh = 0;
 	U8     path_ascii[64];
 	U8     path[64 * 2];
+
 	memset(path_ascii,0x00,64);
-	sprintf((char*)path_ascii,"%c:\\%s",(S8)SRV_FMGR_PUBLIC_DRV,YX_FILE_FOLD_NAME);
-	mmi_asc_to_ucs2((CHAR*)path,(CHAR*)path_ascii);
-	mmi_ucs2cat((CHAR*)path,(CHAR*)YXAPP_AGPS_FILENAME);
+	//sprintf((char*)path_ascii,"%c:\\%s",(S8)SRV_FMGR_PUBLIC_DRV,YX_FILE_FOLD_NAME);
+	//mmi_asc_to_ucs2((CHAR*)path,(CHAR*)path_ascii);
+	mmi_ucs2cpy((CHAR*)path,(CHAR*)YXAPP_AGPS_FILENAME);
 	fh = FS_Open((const U16*)path,FS_READ_ONLY);
 	if(fh >= FS_NO_ERROR)
 	{
@@ -5965,10 +5973,7 @@ static MMI_BOOL Uart1_Interrupt(void *msg)
 		//Uart1_sends(rbuffer,rLen);
 		if(rbuffer[0] == 0x38 && rLen == 1)
 		{
-			
-			lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU2;
-			YxAppSendMsgToMMIMod(APOLLO_MSG_LED_ON,0,0);
-			//break;
+			YxAppSendMsgToMMIMod(APOLLO_MSG_FALLDOWN,0,0);
 			return MMI_TRUE;
 		}
 #if 1 //Update By WangBoJing
@@ -6176,7 +6181,7 @@ void Uart2_Interrupt(task_entry_struct * task_entry_ptr)
 					else
 					{
 					
-						lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU2;
+						//lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU2;
 						YxAppSendMsgToMMIMod(APOLLO_MSG_LED_ON,0,0);
 					}
 				}
@@ -7817,8 +7822,8 @@ void gps_process(void)
 	LatLng tempLatLng = {0};
 	unsigned char i, j;		
 	int high = 0;
-#if 0	
-	if (mIndex++ < 18)  return ;
+#if 1	
+	//if (mIndex++ < 18)  return ;
 
 	sprintf(aaa,"%.6f",a);	
 	sprintf(bbb,"%.6f",b);
@@ -7911,8 +7916,7 @@ void gps_process(void)
 		JW_value[i]=JW_temp[i];
 
 	gps_data_ready();
-#endif
-#if 1
+#else
 	if (mIndex++ < 10)  return ;
 	mLatLngList[mIndex-10].lat = yxGpsParam.latitudev[0];
 	mLatLngList[mIndex-10].lng = yxGpsParam.longitudev[0];
@@ -9294,7 +9298,7 @@ APDS9901_STATUS I2C_APDS9901_GET_STATUS(void)
 
 //------------------hw i2c-----------------------------------------
 
-unsigned int Step_num=0;
+
 
 extern void BMA250E_ini(void);
 void BMA250E_initialization(void)
@@ -9338,7 +9342,7 @@ void BMA250E_READ_DATA(kal_int16 *X, kal_int16 *Y, kal_int16 *Z, unsigned char *
 #if UART_LOG
 					//Uart1_sends("screen on",strlen("screen on"));		
 #endif
-					//hand_status_flag = HAND_STATUS_CHANGE;
+					hand_status_flag = HAND_STATUS_CHANGE;
 					YxAppSendMsgToMMIMod(APOLLO_MSG_LED_ON,0,0);
 				} 
 				
@@ -9412,7 +9416,7 @@ void BMA250E_GsensorSampleCb(void *parameter)
 
 		PEDO_ProcessAccelarationData(x_adc, y_adc, z_adc);
 		
-		Step_num = 0 + PEDO_GetStepCount();
+		step_num = 0 + PEDO_GetStepCount();
 
 		{
 			/*
@@ -9671,6 +9675,11 @@ void ApolloStartGPS(void) {
 	PosType = 0;
 	gps_start();	
 	u8GpsProgress = 1;
+#if (YX_GPS_USE_AGPS == 1)
+	yxGpsParam.yxAgpsDatLen = YxAppGetAgpsData(yxGpsParam.yxAgpsDataBuf,AGPS_MAX_RECEIVE_BUFFER_LEN);
+	kal_prompt_trace(MOD_YXAPP,"yxAgpsDatLen:%d\n", yxGpsParam.yxAgpsDatLen);
+	YxAgpsDataWriteToIc(yxGpsParam.yxAgpsDataBuf,yxGpsParam.yxAgpsDatLen);
+#endif	
 	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT, ApolloGPSDataCallback);
 	
 	StopTimer(APOLLO_GPS_ONOFF_TIMER);
@@ -10042,6 +10051,17 @@ static void YxMMIProcMsgHdler(void *msg)
 		//if (flat_status_tep == FLAT_STATUS_ON) {
 			srv_gpio_setting_set_bl_time(6);
 		//}
+		break;
+	}
+	case APOLLO_MSG_FALLDOWN: {
+		u8LcdUiStatusIndex = LCD_UI_STATUS_FALLDOWN;
+		mmiFrameBufferReflush();
+
+		//call out == SOS
+		YxAppCircyleCallInit();
+		YxAppMakeWithCallType(2,NULL);
+
+		diedao_key = 1;
 		break;
 	}
 

@@ -244,7 +244,7 @@ void YxAppIdleInition(void)
 	//ApolloMinuteTimerCallback();
 	//StartTimer(APOLLO_MINUTE_TIMER, YX_HEART_TICK_UNIT * 72, ApolloMinuteTimerCallback);
 	//StartTimer(APOLLO_GPS_ONOFF_TIMER, YX_HEART_TICK_UNIT * 36, ApolloStartGPS);
-	//ApolloStartLocationTimer(WatchInstance.u8Freq);
+	ApolloStartLocationTimer(WatchInstance.u8Freq);
 	//yxAppExit = 0;
 	
 	yxAppParam->sleephandle = L1SM_GetHandle();
@@ -421,7 +421,7 @@ void YxAppUploadGpsProc(void)
 
 void ApolloUploadGpsProc(void) {
 	kal_prompt_trace(MOD_YXAPP," ApolloUploadGpsProc :%x, ApolloFlag:%x\n", yxAppNeedRunFlag, apollo_flag);
-	if (yxAppNeedRunFlag & APOLLO_RUNKIND_HEART_COMPLETE) {
+	if (yxAppNeedRunFlag & APOLLO_RUNKIND_HEART_COMPLETE || yxAppNeedRunFlag & YX_RUNKIND_OWNER_HEART) {
 		extern void ApolloConnectToServer(void) ;
 		yxAppNeedRunFlag = YX_RUNKIND_OWNER_GPS;
 		ApolloConnectToServer();

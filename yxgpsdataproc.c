@@ -1078,13 +1078,13 @@ void YxAppGpsInition(U8 defaultGps,U16 gpsTimes)
 	{
 		yxGpsParam.yxGpsStartTick = 1;
 		yxGpsParam.gpsTimerVal = YX_GPS_SAMPLE_DATA_TIME * 4;
-		YXAppGpsPowerCtrl(1);
+		//YXAppGpsPowerCtrl(1);
 	}
 	else
 	{
 		yxGpsParam.yxGpsStartTick = 0;
 		yxGpsParam.gpsTimerVal = YX_GPS_SAMPLE_DATA_TIME;
-		YXAppGpsPowerCtrl(0);
+		//YXAppGpsPowerCtrl(0);
 	}
 #else
 	yxGpsParam.gpsTimerVal = YX_GPS_SAMPLE_DATA_TIME;
