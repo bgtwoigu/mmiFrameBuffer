@@ -74,6 +74,17 @@ void YxAppEnableSleep(void)
 extern U16 apollo_flag;
 extern U16 save_flag;
 
+/*
+ * #define  YX_RUNKIND_OWNER_GPS    0x8000  //period upload data by timer
+#define  YX_RUNKIND_OWNER_HEART  0x4000  //ÐÄÌø°ü
+//max 
+#define APOLLO_RUNKIND_HEART_COMPLETE 	0x2000
+
+#define APOLLO_RUNKIND_VOICE_UPLOAD		0x0020
+#define APOLLO_RUNKIND_VOICE_DOWNLOAD	0x0040
+#define APOLLO_RUNKIND_INIT_WATCHDATA	0x0080
+ */
+
 void YxAppUploadDataFinishCb(void)
 {
 	char  kind = 0;
@@ -81,13 +92,24 @@ void YxAppUploadDataFinishCb(void)
 	extern U8 u8Time;
 	u8Time = 0;
 
+	kal_prompt_trace(MOD_YXAPP," YxAppUploadDataFinishCb :%x\n", yxAppNeedRunFlag);
+	apollo_flag = YxAppGetRunFlag();
+
 	if (apollo_flag & APOLLO_RUNKIND_VOICE_UPLOAD) {
-		ApolloAppSetRunFlag(APOLLO_RUNKIND_VOICE_UPLOAD);
+		//ApolloAppSetRunFlag(APOLLO_RUNKIND_VOICE_UPLOAD);
 		ApolloConnectToServer();
 	} else if (apollo_flag & YX_RUNKIND_OWNER_GPS) {
-		ApolloAppSetRunFlag(YX_RUNKIND_OWNER_GPS);
+		//ApolloAppSetRunFlag(YX_RUNKIND_OWNER_GPS);
 		ApolloConnectToServer();
-	} 
+	} else if (apollo_flag & APOLLO_RUNKIND_VOICE_DOWNLOAD) {
+		//ApolloAppSetRunFlag(APOLLO_RUNKIND_VOICE_DOWNLOAD);
+		ApolloConnectToServer();
+	} else if (apollo_flag & APOLLO_RUNKIND_AGPS_DOWNLOAD) {
+		//ApolloAppSetRunFlag(APOLLO_RUNKIND_VOICE_DOWNLOAD);
+		ApolloConnectToServer();
+	} else if (apollo_flag & APOLLO_RUNKIND_INIT_WATCHDATA) {
+		
+	}
 #if 0
 	else if (apollo_flag & APOLLO_RUNKIND_VOICE_DOWNLOAD) {
 		//YxAppConnectToMyServer();
@@ -201,6 +223,8 @@ void YxAppStepRunMain(U16 runKind)
 		YxAppDisableSleep();
 		YxAppGpsControl(1);
 	}
+#else
+	
 #endif
 }
 
@@ -213,11 +237,29 @@ extern void ApolloMinuteTimerCallback(void) ;
 extern void ApolloStartGPS(void) ;
 extern int ApolloWatchConfig(void);
 extern void ApolloStartLocationTimer(int timeType);
+extern void ApolloInitTime(void);
+extern void ApolloStartLab(void);
 
 extern WatchConf WatchInstance;
+#if ENABLE_MMI_INITTIME
+extern U8 u8NeedInitWatchTimeFlag;
+#endif
+#if (YX_GPS_USE_AGPS == 1)
+extern U8 u8NeedInitAgpsDataFlag;
+extern YXGPSPARAMSTR  yxGpsParam;
+#endif
 
 void YxAppIdleInition(void)
 {
+#if ENABLE_MMI_INITTIME
+	u8NeedInitWatchTimeFlag = 0x01;
+	ApolloInitTime();
+#endif
+#if (YX_GPS_USE_AGPS == 1)
+	yxGpsParam.yxAgpsDatLen = YxAppGetAgpsData(yxGpsParam.yxAgpsDataBuf,AGPS_MAX_RECEIVE_BUFFER_LEN);
+	u8NeedInitAgpsDataFlag = 0x01;
+	ApolloStartLab();
+#endif
 #if ENABLE_MMI_FRAMEBUFFER //Update By WangBoJing 20160327
 	mmiFrameBufferInit();
 #endif
@@ -420,22 +462,27 @@ void YxAppUploadGpsProc(void)
 
 
 void ApolloUploadGpsProc(void) {
+#if 0
 	kal_prompt_trace(MOD_YXAPP," ApolloUploadGpsProc :%x, ApolloFlag:%x\n", yxAppNeedRunFlag, apollo_flag);
 	if (yxAppNeedRunFlag & APOLLO_RUNKIND_HEART_COMPLETE || yxAppNeedRunFlag & YX_RUNKIND_OWNER_HEART) {
 		extern void ApolloConnectToServer(void) ;
-		yxAppNeedRunFlag = YX_RUNKIND_OWNER_GPS;
+		yxAppNeedRunFlag |= YX_RUNKIND_OWNER_GPS;
 		ApolloConnectToServer();
 	} else {
 		save_flag = YX_RUNKIND_OWNER_GPS;
 	}
-
+#else
+	extern void ApolloConnectToServer(void) ;
+	yxAppNeedRunFlag |= YX_RUNKIND_OWNER_GPS;
+	ApolloConnectToServer();
+#endif
 	
 }
 
 char checkApolloFlagStatus(void) {
-	if (yxAppNeedRunFlag == APOLLO_RUNKIND_HEART_COMPLETE || yxAppNeedRunFlag == YX_RUNKIND_OWNER_HEART
-		|| yxAppNeedRunFlag == APOLLO_RUNKIND_VOICE_UPLOAD || yxAppNeedRunFlag == APOLLO_RUNKIND_VOICE_DOWNLOAD
-		|| yxAppNeedRunFlag == YX_RUNKIND_OWNER_GPS) {
+	if ((yxAppNeedRunFlag & APOLLO_RUNKIND_HEART_COMPLETE) || (yxAppNeedRunFlag & YX_RUNKIND_OWNER_HEART)
+		|| (yxAppNeedRunFlag & APOLLO_RUNKIND_VOICE_UPLOAD) || (yxAppNeedRunFlag & APOLLO_RUNKIND_VOICE_DOWNLOAD)
+		|| (yxAppNeedRunFlag & YX_RUNKIND_OWNER_GPS)) {
 		return 1;
 	} else {
 		return 0;
@@ -457,7 +504,7 @@ void YxAppUploadHeartProc(void)
 		yxAppNeedRunFlag = APOLLO_RUNKIND_HEART_COMPLETE;
 	}
 	
-#if 1
+#if 0
 	if ((yxAppNeedRunFlag & APOLLO_RUNKIND_HEART_COMPLETE) || (yxAppNeedRunFlag & YX_RUNKIND_OWNER_HEART)) {		
 		extern U8 u8Time;
 
@@ -476,7 +523,18 @@ void YxAppUploadHeartProc(void)
 			return ;
 		}
 		
-		yxAppNeedRunFlag = YX_RUNKIND_OWNER_HEART;
+		yxAppNeedRunFlag |= YX_RUNKIND_OWNER_HEART;
+		u8Time = 0;
+		ApolloConnectToServer();
+	}
+#elif 1
+	if ((yxAppNeedRunFlag & APOLLO_RUNKIND_VOICE_UPLOAD)
+		|| (yxAppNeedRunFlag & APOLLO_RUNKIND_VOICE_DOWNLOAD)
+		|| (yxAppNeedRunFlag & APOLLO_RUNKIND_AGPS_DOWNLOAD)
+		|| (yxAppNeedRunFlag & YX_RUNKIND_OWNER_GPS)) {
+		;
+	} else {
+		yxAppNeedRunFlag |= YX_RUNKIND_OWNER_HEART;
 		u8Time = 0;
 		ApolloConnectToServer();
 	}

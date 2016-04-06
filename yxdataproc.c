@@ -625,7 +625,7 @@ extern U8 sos_key;
 extern U8 diedao_key;
 extern U32 step_num;
 extern U32 sleep_quality;
-extern U8 blockDataFlag;
+extern U8 blockDataFlag; //BLE data recv flag
 
 
 #define isPrime(year) ((year%4==0&&year%100!=0)||(year%400==0))  
@@ -743,6 +743,7 @@ S32 Apollo_send_heart_package(U8 *sendBuf, U16 maxLen) {
 	Apollo_U32_datacpy(heartHeader+24, timeDiff);
 
 	heartHeader[28] = blockDataFlag;
+	//heartHeader[28] = 0x01; //init time
 	blockDataFlag = 0x0;
 
 	for (i = 0;i < APOLLO_UPLOAD_HEART_LENGTH; i ++) {
@@ -763,13 +764,17 @@ S32 Apollo_send_record_data(U8 *sendBuf, U16 maxLen) {
 
 S32 Apollo_send_request_data(U8 *sendBuf, U16 maxLen) {
 	int i = 0;
-
-	kal_prompt_trace(MOD_YXAPP,"Apollo_send_request_data\n");
+	U16  flag = YxAppGetRunFlag();
 
 	for (i = 0;i < APOLLO_HEART_PACKAGE_LENGTH;i ++) {
 		sendBuf[i] = requestHeader[i];
 	}
-	//sendBuf[13] = 0x61;
+
+	if (flag & APOLLO_RUNKIND_VOICE_DOWNLOAD) {
+		sendBuf[13] = 0x60;
+	} else if (flag & APOLLO_RUNKIND_AGPS_DOWNLOAD) {
+		sendBuf[13] = 0x61;
+	}
 
 	Apollo_set_burnkey(sendBuf, apollo_key_buf);
 
@@ -780,18 +785,30 @@ U8 LatLongValue[10] = {0};
 U8 LbsWifiValue[64] = {0};
 U8 PosType = 0x00;
 extern int JW_height;
+#if (YX_GPS_USE_AGPS == 1)
+extern U8 u8NeedInitAgpsDataFlag;
+extern YXGPSPARAMSTR  yxGpsParam;
+#endif
 
 #define POS_TYPE 9
 
 
 S32 Apollo_send_gps_data(U8 *sendBuf, U16 maxLen) {
 	int i = 0;
+	U16 flag = YxAppGetRunFlag();
 	U32 timeDiff = getSecondOff();
+
+	
 	kal_prompt_trace(MOD_YXAPP,"PosType : %x\n", PosType);
 	Apollo_set_burnkey(gpsHeader, apollo_key_buf);
+	
+	if (u8NeedInitAgpsDataFlag) { //Download AGPS Data
+		PosType |= 0x10;
+	}
+	
 	gpsHeader[POS_TYPE] = 0x0;
 	if (PosType & 0x01) {
-		gpsHeader[POS_TYPE] = 0x01;		
+		gpsHeader[POS_TYPE] = PosType;		
 		PosType = 0x0;
 		for (i = 0;i < 10;i ++) {
 			gpsHeader[POS_TYPE+i +1] = LatLongValue[i];
@@ -803,15 +820,22 @@ S32 Apollo_send_gps_data(U8 *sendBuf, U16 maxLen) {
 		for (i = 0;i < 32;i ++) {
 			sendBuf[i] = gpsHeader[i];
 		}
+
+		flag &= (~YX_RUNKIND_OWNER_GPS);
+		ApolloAppSetRunFlag(flag);
+		
 		return 32;
 	} 
 	if (PosType == 0x0) return 0;
+	gpsHeader[POS_TYPE] = PosType;
+#if 0
 	if (PosType & 0x02) {
 		gpsHeader[POS_TYPE] |= 0x02;
 	} 
 	if (PosType & 0x04) {
 		gpsHeader[POS_TYPE] |= 0x04;
 	}
+#endif
 	for (i = 0;i < 34;i ++) {
 		gpsHeader[POS_TYPE+i +1] = LbsWifiValue[i];
 	}
@@ -821,6 +845,9 @@ S32 Apollo_send_gps_data(U8 *sendBuf, U16 maxLen) {
 	}
 	kal_prompt_trace(MOD_YXAPP," id1:%x, id2:%x, PosType : %x\n",sendBuf[9], sendBuf[10], PosType);
 	//PosType = 0x0;
+	flag &= (~YX_RUNKIND_OWNER_GPS);
+	ApolloAppSetRunFlag(flag);
+	
 	return APOLLO_UPLOAD_GPS_LENGTH;
 }
 
@@ -887,21 +914,6 @@ UINT Apollo_write_voice_data(PU8 data,UINT size) {
 
 		FS_Commit(fh);
 		FS_Close(fh);
-
-		//send msg to queue
-		/*
-		p[0] = APOLLO_PLAY_RECV_VOICE_DATA;
-		
-		apollo_ilm = allocate_ilm(MOD_MMI);
-		apollo_ilm->msg_id = MSG_ID_MMI_JAVA_UI_TEXTFIELD_HIDE_REQ;
-		apollo_ilm->local_para_ptr = (local_para_struct*)p;
-		apollo_ilm->peer_buff_ptr = NULL;
-
-		apollo_ilm->src_mod_id  = MOD_MMI;//MOD_L4C;
-		apollo_ilm->dest_mod_id = MOD_MMI;
-		apollo_ilm->sap_id = MOD_MMI;//MMI_L4C_SAP;
-		msg_send_ext_queue(apollo_ilm);
-		*/
 	}
 	return wrsize;
 }
@@ -966,16 +978,22 @@ S32 Apollo_read_voice_packet(U32 *readlen, U32 *readIndex, U8 *readBuffer) {
 
 			*readlen = 0;
 			*readIndex = 0;
-			ApolloAppSetRunFlag(APOLLO_RUNKIND_HEART_COMPLETE);
-			Apollo_write_voice_data(voice_data, voice_size);
+			
+			if (YxAppGetRunFlag() & APOLLO_RUNKIND_AGPS_DOWNLOAD) {
+				YxAppSaveAgpsData(voice_data, voice_size);
+				apollo_flag &= ~APOLLO_RUNKIND_AGPS_DOWNLOAD;
+				
+				u8NeedInitAgpsDataFlag = 0x0; //download ok and clear flag
+				yxGpsParam.yxAgpsDatLen = YxAppGetAgpsData(yxGpsParam.yxAgpsDataBuf,AGPS_MAX_RECEIVE_BUFFER_LEN);
+			} else if (YxAppGetRunFlag() & APOLLO_RUNKIND_VOICE_DOWNLOAD) {
+				Apollo_write_voice_data(voice_data, voice_size);
+				apollo_flag &= ~APOLLO_RUNKIND_VOICE_DOWNLOAD;
 
-			StartTimer(APOLLO_PLAY_RECV_VOICE_DATA, YX_HEART_TICK_UNIT, ApolloSendSerialReady);
-			blockDataFlag = 0x01;
+				StartTimer(APOLLO_PLAY_RECV_VOICE_DATA, YX_HEART_TICK_UNIT, ApolloSendSerialReady);
+				blockDataFlag = 0x01;
 			//download complete
-			apollo_flag = YxAppGetRunFlag();
-			if (apollo_flag == APOLLO_RUNKIND_VOICE_DOWNLOAD) {
-				ApolloAppSetRunFlag(APOLLO_RUNKIND_HEART_COMPLETE);
 			}
+			ApolloAppSetRunFlag(apollo_flag);
 			break;
 		}
 
@@ -985,44 +1003,27 @@ S32 Apollo_read_voice_packet(U32 *readlen, U32 *readIndex, U8 *readBuffer) {
 
 S32 YxAppSockConnectedCallback(U8 *sendBuf,U16 maxLen)//maxlen:YX_SOCK_BUFFER_LEN,Á¬½Ó·þÎñÆ÷³É¹¦Ê±µÄ»Øµ÷º¯Êý,¿ÉÒÔÔÚÀïÃæ×¼±¸ÒªÉÏ´«µÄÊý¾Ý,²¢ÉÏ´«µ½·þÎñÆ÷ÉÏ.·µ»Ø>0:´ú±íÒª·¢ËÍÊý¾Ýµ½·þÎñÆ÷,0Ôò²»Òª
 {
-#if 0
-	U16  flag = YxAppGetRunFlag();
-	YxProtocolFreeRes();
-	if(flag & YX_RUNKIND_OWNER_HEART)
-		return YxAppBuildTxtCmdHeartUploadPackage(sendBuf,maxLen);
-	else
-	{
-	#if 0
-		S32   datLength = YxAppSendUnloadData(sendBuf,maxLen);
-	#else
-		S32   datLength = Apollo_send_record_data(sendBuf,maxLen);
-	#endif
-		if(datLength>0)
-			return datLength;
-		else
-			return YxAppBuildTxtCmdGpsUploadPackage(0,sendBuf,maxLen);
-	}
-#else
+
 	U16  flag = YxAppGetRunFlag();
 	YxProtocolFreeRes();
 	
 	if (apollo_key_ready == 0) { //download key
 		return Apollo_send_burnkey_package(sendBuf,maxLen);
 	} 
-	
-	if(flag & YX_RUNKIND_OWNER_HEART) 
-		return Apollo_send_heart_package(sendBuf,maxLen);
-	else if (flag & APOLLO_RUNKIND_VOICE_UPLOAD) {
+
+	if (flag & APOLLO_RUNKIND_INIT_WATCHDATA) {
+		
+	} else if (flag & APOLLO_RUNKIND_VOICE_UPLOAD) {
 		return Apollo_send_record_data(sendBuf,maxLen);
-	} else if (flag & APOLLO_RUNKIND_VOICE_DOWNLOAD) {
+	} else if ((flag & APOLLO_RUNKIND_VOICE_DOWNLOAD) || (flag & APOLLO_RUNKIND_AGPS_DOWNLOAD)) {
 		return Apollo_send_request_data(sendBuf, maxLen);
 	} else if (flag & YX_RUNKIND_OWNER_GPS){
 		return Apollo_send_gps_data(sendBuf, maxLen);
+	} else /* if(flag & YX_RUNKIND_OWNER_HEART) */{
+		return Apollo_send_heart_package(sendBuf, maxLen);
 	}
-	
 
 
-#endif
 }
 
 static U16 YxAPPCommandProc(S8 *cmdStr,U16 length,U8 *resCmd)
@@ -1694,6 +1695,9 @@ extern WatchConf WatchInstance;
 extern void gps_start(void);
 extern void ApolloGPSDataCallback(void);
 int ApolloWatchSave(void);
+#if ENABLE_MMI_INITTIME
+extern U8 u8NeedInitWatchTimeFlag;
+#endif
 
 
 char phonenumber[20] = {0};
@@ -1715,6 +1719,21 @@ S32 YxAppSockReadDataCallback(U8 *readBuf,U16 readLen,U8 *sendBuffer)//readBuf:´
 	}
 #else
 	if (readBuf[0] == 'R' && readBuf[1] == 'T' && readBuf[2] == 'O' && readBuf[3] == 'K') {
+		if ((readLen > 6) && u8NeedInitWatchTimeFlag) {
+			rtc_format_struct rtcTime = {0};
+			rtcTime.rtc_year = readBuf[6];
+			rtcTime.rtc_mon = readBuf[7];
+			rtcTime.rtc_wday = readBuf[8];
+			rtcTime.rtc_day = readBuf[8];
+			rtcTime.rtc_hour = readBuf[9];
+			rtcTime.rtc_min = readBuf[10];
+			rtcTime.rtc_sec = readBuf[11];
+
+			SetDateTime(&rtcTime);
+			u8NeedInitWatchTimeFlag = 0x0;
+
+			YxAppSendMsgToMMIMod(APOLLO_MSG_LED_REFLASH,0,0);
+		}
 		ApolloAppSetRunFlag(APOLLO_RUNKIND_HEART_COMPLETE);
 		return 1;
 	}
@@ -1762,7 +1781,14 @@ S32 YxAppSockReadDataCallback(U8 *readBuf,U16 readLen,U8 *sendBuffer)//readBuf:´
 					break;
 				case COMMAND_VOICE_RECV: {
 					apollo_flag = YxAppGetRunFlag();
-					ApolloAppSetRunFlag(APOLLO_RUNKIND_VOICE_DOWNLOAD);
+					apollo_flag |= APOLLO_RUNKIND_VOICE_DOWNLOAD;
+					ApolloAppSetRunFlag(apollo_flag);
+					break;
+				}
+				case COMMAND_AGPS_DOWNLOAD: {
+					apollo_flag = YxAppGetRunFlag();
+					apollo_flag |= APOLLO_RUNKIND_AGPS_DOWNLOAD;
+					ApolloAppSetRunFlag(APOLLO_RUNKIND_AGPS_DOWNLOAD);
 					break;
 				}
 				case COMMAND_COUNTSTEP_SETON:
