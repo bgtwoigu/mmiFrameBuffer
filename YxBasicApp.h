@@ -371,7 +371,7 @@ extern void motor_disen(void);
 
 /***************************************************具体根据你们的需要修改相关宏**************************************************/
 //debug
-#define  YX_IS_TEST_VERSION          2               //是否是测试版本,0:量产版本,1:串口1调试并打印输出,2:USB调试并打印输出,USB打印时
+#define  YX_IS_TEST_VERSION          0               //是否是测试版本,0:量产版本,1:串口1调试并打印输出,2:USB调试并打印输出,USB打印时
                                                      //电脑端工具要用catcher,同时代码里custom\common\hal\nvram\nvram_data_items.c
                                                      //中static port_setting_struct const NVRAM_EF_PORT_SETTING_DEFAULT[]数组里,tst-ps uses uart_port_null(value is 99),99改为4即可
                                                      //在catcher的FILLTER里选只一个MOD即MOD_BT就可以看到我们的打印输出信息
@@ -902,6 +902,15 @@ typedef struct _WATCHCONF {
 	char u8ContactNumber[CONTACT_NUMBER_SIZE][PHONE_NUMBER_LENGTH];
 	char u8PhoneBook[PHONE_BOOK_SIZE][PHONE_NUMBER_LENGTH];
 } WatchConf;
+
+
+
+#define isPrime(year) ((year%4==0&&year%100!=0)||(year%400==0))  
+struct SampleDate  {  
+    int year;  
+    int month;  
+    int day;  
+}; 
 
 
 

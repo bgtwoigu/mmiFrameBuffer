@@ -97,16 +97,16 @@ void YxAppUploadDataFinishCb(void)
 
 	if (apollo_flag & APOLLO_RUNKIND_VOICE_UPLOAD) {
 		//ApolloAppSetRunFlag(APOLLO_RUNKIND_VOICE_UPLOAD);
-		ApolloConnectToServer();
+		//ApolloConnectToServer();
 	} else if (apollo_flag & YX_RUNKIND_OWNER_GPS) {
 		//ApolloAppSetRunFlag(YX_RUNKIND_OWNER_GPS);
-		ApolloConnectToServer();
+		//ApolloConnectToServer();
 	} else if (apollo_flag & APOLLO_RUNKIND_VOICE_DOWNLOAD) {
 		//ApolloAppSetRunFlag(APOLLO_RUNKIND_VOICE_DOWNLOAD);
-		ApolloConnectToServer();
+		//ApolloConnectToServer();
 	} else if (apollo_flag & APOLLO_RUNKIND_AGPS_DOWNLOAD) {
 		//ApolloAppSetRunFlag(APOLLO_RUNKIND_VOICE_DOWNLOAD);
-		ApolloConnectToServer();
+		//ApolloConnectToServer();
 	} else if (apollo_flag & APOLLO_RUNKIND_INIT_WATCHDATA) {
 		
 	}
@@ -239,6 +239,7 @@ extern int ApolloWatchConfig(void);
 extern void ApolloStartLocationTimer(int timeType);
 extern void ApolloInitTime(void);
 extern void ApolloStartLab(void);
+extern void ApolloStartGPS(void);
 
 extern WatchConf WatchInstance;
 #if ENABLE_MMI_INITTIME
@@ -254,11 +255,6 @@ void YxAppIdleInition(void)
 #if ENABLE_MMI_INITTIME
 	u8NeedInitWatchTimeFlag = 0x01;
 	ApolloInitTime();
-#endif
-#if (YX_GPS_USE_AGPS == 1)
-	yxGpsParam.yxAgpsDatLen = YxAppGetAgpsData(yxGpsParam.yxAgpsDataBuf,AGPS_MAX_RECEIVE_BUFFER_LEN);
-	u8NeedInitAgpsDataFlag = 0x01;
-	ApolloStartLab();
 #endif
 #if ENABLE_MMI_FRAMEBUFFER //Update By WangBoJing 20160327
 	mmiFrameBufferInit();
@@ -314,7 +310,15 @@ void YxAppIdleInition(void)
 	hand_mode_ini();// 抬手显示 初始化
 
 	srv_gpio_setting_set_bl_time(10);
+	
 	//StartTimer(I2C_TIMER,2000,yaoyiyao_ini);//继续刷
+#if (YX_GPS_USE_AGPS == 1)
+	yxGpsParam.yxAgpsDatLen = YxAppGetAgpsData(yxGpsParam.yxAgpsDataBuf,AGPS_MAX_RECEIVE_BUFFER_LEN);
+	u8NeedInitAgpsDataFlag = 0x01;
+	//ApolloStartLab();
+	ApolloStartGPS();
+		//StartTimer( YX_HEART_TICK_UNIT*2,ApolloStartLab);
+#endif
 	
 }
 
@@ -472,9 +476,15 @@ void ApolloUploadGpsProc(void) {
 		save_flag = YX_RUNKIND_OWNER_GPS;
 	}
 #else
-	extern void ApolloConnectToServer(void) ;
-	yxAppNeedRunFlag |= YX_RUNKIND_OWNER_GPS;
-	ApolloConnectToServer();
+	if ((yxAppNeedRunFlag & APOLLO_RUNKIND_VOICE_UPLOAD) 
+		|| (yxAppNeedRunFlag & APOLLO_RUNKIND_VOICE_DOWNLOAD)
+		|| (yxAppNeedRunFlag & APOLLO_RUNKIND_AGPS_DOWNLOAD)) {
+		;
+	} else {
+		extern void ApolloConnectToServer(void) ;
+		yxAppNeedRunFlag |= YX_RUNKIND_OWNER_GPS;
+		ApolloConnectToServer();
+	}
 #endif
 	
 }
@@ -482,7 +492,7 @@ void ApolloUploadGpsProc(void) {
 char checkApolloFlagStatus(void) {
 	if ((yxAppNeedRunFlag & APOLLO_RUNKIND_HEART_COMPLETE) || (yxAppNeedRunFlag & YX_RUNKIND_OWNER_HEART)
 		|| (yxAppNeedRunFlag & APOLLO_RUNKIND_VOICE_UPLOAD) || (yxAppNeedRunFlag & APOLLO_RUNKIND_VOICE_DOWNLOAD)
-		|| (yxAppNeedRunFlag & YX_RUNKIND_OWNER_GPS)) {
+		|| (yxAppNeedRunFlag & YX_RUNKIND_OWNER_GPS) || (yxAppNeedRunFlag & APOLLO_RUNKIND_AGPS_DOWNLOAD )) {
 		return 1;
 	} else {
 		return 0;
@@ -494,7 +504,7 @@ void YxAppUploadHeartProc(void)
 	//YXSYSTEMPARAM     *yxSetting = YxAppGetSystemParam(0);	
 	extern void ApolloConnectToServer(void) ;
 	
-	if (u8HeartPacketTimes++ > 10) {
+	if (u8HeartPacketTimes++ > 4) {
 		yxAppParam->uploadStart = 0;
 		yxAppNeedRunFlag = APOLLO_RUNKIND_HEART_COMPLETE;
 		u8HeartPacketTimes = 0;

@@ -256,7 +256,7 @@ static U8 GpsUartOneLineDataProc(U8 *buffer,U16 len)
 		memcpy((void*)dBuffer,(void*)buffer,len);
 		dBuffer[len] = 0x00;
 		//YxAppTestUartSendData((U8*)dBuffer,len);
-		kal_prompt_trace(MOD_YXAPP, "bbbb %s", dBuffer);
+		//kal_prompt_trace(MOD_YXAPP, "bbbb %s", dBuffer);
 	}
 #endif
 	if(GpsChecksumValue(buffer,len)==1)

@@ -628,14 +628,6 @@ extern U32 sleep_quality;
 extern U8 blockDataFlag; //BLE data recv flag
 
 
-#define isPrime(year) ((year%4==0&&year%100!=0)||(year%400==0))  
-struct SampleDate  {  
-    int year;  
-    int month;  
-    int day;  
-}; 
-
-
 int dateDiff(struct SampleDate mindate,struct SampleDate maxdate)  
 {  
     int days=0,j,flag;  
@@ -671,8 +663,8 @@ int dateDiff(struct SampleDate mindate,struct SampleDate maxdate)
     return days;  
 }   
 
-kal_uint8 oldMin = 0;
-kal_uint8 u8Sec = 0;
+//kal_uint8 oldMin = 0;
+//kal_uint8 u8Sec = 0;
 
 
 
@@ -684,18 +676,20 @@ U32 getSecondOff(void) {
 	
 	applib_dt_get_date_time(&dt);
 
+	dt.nYear = (dt.nYear > 2000 ? dt.nYear : (2000 + dt.nYear % 100) );
+
 	nowTime.day = dt.nDay;
 	nowTime.month = dt.nMonth;
 	nowTime.year = dt.nYear;
-
+#if 0
 	u8Sec += 5;
 	if (oldMin != dt.nMin) {
 		oldMin = dt.nMin;
 		u8Sec = 0;
 	}
-
+#endif
 	diff = dateDiff(beginTime, nowTime);
-	return (diff*24*60*60 + dt.nHour*60*60 + dt.nMin*60 + u8Sec);
+	return (diff*24*60*60 + dt.nHour*60*60 + dt.nMin*60 + dt.nSec);
 }
 
 void Apollo_U32_datacpy(U8 *send, U32 num) {
@@ -939,6 +933,7 @@ S32 Apollo_read_voice_packet(U32 *readlen, U32 *readIndex, U8 *readBuffer) {
 	UINT voice_size = *readlen;
 	U16 i = 0;
 	U8 *buffer = readBuffer;
+	apollo_flag = YxAppGetRunFlag();
 	
 	
 	while (1) {
@@ -979,15 +974,15 @@ S32 Apollo_read_voice_packet(U32 *readlen, U32 *readIndex, U8 *readBuffer) {
 			*readlen = 0;
 			*readIndex = 0;
 			
-			if (YxAppGetRunFlag() & APOLLO_RUNKIND_AGPS_DOWNLOAD) {
+			if (apollo_flag & APOLLO_RUNKIND_AGPS_DOWNLOAD) {
 				YxAppSaveAgpsData(voice_data, voice_size);
-				apollo_flag &= ~APOLLO_RUNKIND_AGPS_DOWNLOAD;
+				apollo_flag &= (~APOLLO_RUNKIND_AGPS_DOWNLOAD);
 				
 				u8NeedInitAgpsDataFlag = 0x0; //download ok and clear flag
 				yxGpsParam.yxAgpsDatLen = YxAppGetAgpsData(yxGpsParam.yxAgpsDataBuf,AGPS_MAX_RECEIVE_BUFFER_LEN);
-			} else if (YxAppGetRunFlag() & APOLLO_RUNKIND_VOICE_DOWNLOAD) {
+			} else if (apollo_flag & APOLLO_RUNKIND_VOICE_DOWNLOAD) {
 				Apollo_write_voice_data(voice_data, voice_size);
-				apollo_flag &= ~APOLLO_RUNKIND_VOICE_DOWNLOAD;
+				apollo_flag &= (~APOLLO_RUNKIND_VOICE_DOWNLOAD);
 
 				StartTimer(APOLLO_PLAY_RECV_VOICE_DATA, YX_HEART_TICK_UNIT, ApolloSendSerialReady);
 				blockDataFlag = 0x01;
@@ -1718,19 +1713,19 @@ S32 YxAppSockReadDataCallback(U8 *readBuf,U16 readLen,U8 *sendBuffer)//readBuf:´
 		return 1;
 	}
 #else
-	if (readBuf[0] == 'R' && readBuf[1] == 'T' && readBuf[2] == 'O' && readBuf[3] == 'K') {
+	if (readBuf[0] == 'R' && readBuf[1] == 'E' && readBuf[2] == 'T' && readBuf[3] == 'O' && readBuf[4] == 'K') {
 		if ((readLen > 6) && u8NeedInitWatchTimeFlag) {
 			rtc_format_struct rtcTime = {0};
 			rtcTime.rtc_year = readBuf[6];
 			rtcTime.rtc_mon = readBuf[7];
 			rtcTime.rtc_wday = readBuf[8];
-			rtcTime.rtc_day = readBuf[8];
-			rtcTime.rtc_hour = readBuf[9];
-			rtcTime.rtc_min = readBuf[10];
-			rtcTime.rtc_sec = readBuf[11];
+			rtcTime.rtc_day = readBuf[9];
+			rtcTime.rtc_hour = readBuf[10];
+			rtcTime.rtc_min = readBuf[11];
+			rtcTime.rtc_sec = readBuf[12];
 
 			SetDateTime(&rtcTime);
-			u8NeedInitWatchTimeFlag = 0x0;
+			//u8NeedInitWatchTimeFlag = 0x0;
 
 			YxAppSendMsgToMMIMod(APOLLO_MSG_LED_REFLASH,0,0);
 		}

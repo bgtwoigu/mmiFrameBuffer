@@ -886,7 +886,7 @@ void mmiFrameBufferMainPageWeekDisplay(applib_time_struct *pDt) {
 
 	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_MAINPAGE_WEEK_X, MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y, DB_FONT_XING);
 	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_MAINPAGE_WEEK_X + MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y, DB_FONT_QI);
-	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_MAINPAGE_WEEK_X + 2 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y, DB_FONT_YI+u8Week);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_MAINPAGE_WEEK_X + 2 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y, DB_FONT_RI+u8Week);
 }
 
 void mmiFrameBufferMainPageTimeDisplay(void) {
@@ -3510,7 +3510,7 @@ U8 YxAppSockNotifyCb(void* inMsg)
 
 	//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppSockNotifyCb connect sucess\n");
     	if(inMsg==NULL)    {      
-		kal_prompt_trace(MOD_YXAPP,"%d return false \n", __LINE__);
+		//kal_prompt_trace(MOD_YXAPP,"%d return false \n", __LINE__);
         	return MMI_FALSE;
     	}
 	ind = (app_soc_notify_ind_struct*)inMsg;
@@ -3536,14 +3536,14 @@ U8 YxAppSockNotifyCb(void* inMsg)
 				}	
 			}
 #if(YX_IS_TEST_VERSION!=0)
-			YxAppTestUartSendData("ldz-21\r\n",7);
+			//YxAppTestUartSendData("ldz-21\r\n",7);
 #endif
 		}
 		else
 		{
 			YxAppCloseSocket(1);
 #if(YX_IS_TEST_VERSION!=0)
-			YxAppTestUartSendData("ldz-9\r\n",7);
+			//YxAppTestUartSendData("ldz-9\r\n",7);
 #endif
 		}
 		break;
@@ -3560,7 +3560,7 @@ __CONTINUE_READ:
 				S32   readLen = YxAppTcpSockRead(yxAppSockData.readBuffer,YX_SOCK_READ_BUFFER_LEN);
 				if(readLen>0)
 				{
-					kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppSockNotifyCb SOC_READ: %d\n", readLen);
+					//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppSockNotifyCb SOC_READ: %d\n", readLen);
 					yxAppSockData.sendLen = YxAppSockReadDataCallback(yxAppSockData.readBuffer,(U16)readLen,yxAppSockData.sendBuf);
 					if(yxAppSockData.sendLen>0 && yxAppSockData.readBuffer[0] == 0x43 && 
 						(yxAppSockData.readBuffer[3] == 0x02 || yxAppSockData.readBuffer[3] == 0x2B))
@@ -3595,7 +3595,7 @@ __CONTINUE_READ:
 		break;
 	case SOC_WRITE: //MTK GPRS发数据时,一次最大为4K,超过4K,要等此消息后,才能发送数据
 #if(YX_IS_TEST_VERSION==2)
-		kal_prompt_trace(MOD_YXAPP,"soc write:%d,%d\r\n",yxAppSockData.curSendLen,yxAppSockData.sendLen);
+		//kal_prompt_trace(MOD_YXAPP,"soc write:%d,%d\r\n",yxAppSockData.curSendLen,yxAppSockData.sendLen);
 #endif
 		if((yxAppSockData.curSendLen>0) && (yxAppSockData.sendLen > YX_SOCK_BUFFER_LEN))
 		{
@@ -3622,9 +3622,9 @@ __CONTINUE_READ:
 		U16  flag = YxAppGetRunFlag();
 		YxAppCloseSocket(0);
 
-		kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppSockNotifyCb SOC_CLOSE: %x\n", flag);
+		//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppSockNotifyCb SOC_CLOSE: %x\n", flag);
 #if(YX_IS_TEST_VERSION!=0)
-		YxAppTestUartSendData("ldz-10\r\n",8);
+		//YxAppTestUartSendData("ldz-10\r\n",8);
 #endif
 #if 1
 		if ((flag & APOLLO_RUNKIND_VOICE_DOWNLOAD) || (flag & APOLLO_RUNKIND_AGPS_DOWNLOAD)) {
@@ -3656,10 +3656,10 @@ void ApolloConnectToServer(void ) {
 	S8 ret = -1;
 	if (u8Time ++ >= 2) return;
 
-	kal_prompt_trace(MOD_YXAPP," aaa connect to server, socket: %d, status:%d\n", yxNetContext_ptr.sock , yxNetContext_ptr.socket_state);
+	//kal_prompt_trace(MOD_YXAPP," aaa connect to server, socket: %d, status:%d\n", yxNetContext_ptr.sock , yxNetContext_ptr.socket_state);
 	if (yxNetContext_ptr.sock == -1) {
 		ret = YxAppConnectToMyServer();
-		kal_prompt_trace(MOD_YXAPP,"{wbj_debug} ApolloConnectToServer ret: %d\n", ret);
+		//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} ApolloConnectToServer ret: %d\n", ret);
 		if (ret != 1) {
 			StartTimer(APOLLO_RESEND_MESSAGE_TIMER, 500, ApolloConnectToServer);
 		} else {
@@ -3676,7 +3676,7 @@ void ApolloConnectToServer(void ) {
 static S8 YxAppSocketConnect(S8 sock,sockaddr_struct *address)
 {
 	//kal_prompt_trace(MOD_YXAPP,"YxAppSocketConnect\n");
-	kal_prompt_trace(MOD_YXAPP,"sock:%d , YxAppSocketConnect addr:%d.%d.%d.%d\n", sock ,address->addr[0], address->addr[1], address->addr[2], address->addr[3]);
+	//kal_prompt_trace(MOD_YXAPP,"sock:%d , YxAppSocketConnect addr:%d.%d.%d.%d\n", sock ,address->addr[0], address->addr[1], address->addr[2], address->addr[3]);
 #if 0 //Update By WangBoJing
 	if (address->addr[0] != 112) {
 		address->addr[0] = 112;
@@ -3755,9 +3755,6 @@ static S8 YxAppGetHostByNameInt(const S8 *host,U8 *addr,U8 *addr_len,U32 dtacct_
 		yxNetContext_ptr.socket_state = YX_NET_STATUS_CONN_CONNECTTING;//YX_NET_STATUS_CONN_HOST_BY_NAME;
 		memcpy((void*)address.addr,(void*)addr,4);
 		YxAppSocketConnect(yxNetContext_ptr.sock,&address);
-#if(YX_IS_TEST_VERSION!=0)
-		YxAppTestUartSendData("ldz-23\r\n",11);
-#endif
 	}
 	else if(SOC_WOULDBLOCK == ret||ret == SOC_ALREADY)
     {
@@ -3800,7 +3797,7 @@ static S8 YxAppTcpStartConnect(const S8* host, U16 port, S8 apn)
 	if(yxNetContext_ptr.sock<0 || yxNetContext_ptr.socket_state==YX_NET_STATUS_CONN_CONNECTTING)
 		return 0;
 	memset(&addr,0,sizeof(sockaddr_struct));
-	kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppTcpStartConnect ret: %d\n", apn);
+	//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppTcpStartConnect ret: %d\n", apn);
 		
 	addr.sock_type = SOC_SOCK_STREAM;
 	if(apn == MAPN_WAP)    // cmwap 连接
@@ -3829,9 +3826,6 @@ static S8 YxAppTcpStartConnect(const S8* host, U16 port, S8 apn)
 			memcpy(addr.addr, (void*)yxNetContext_ptr.dnsIplist.address, 4);
 			addr.addr_len = 4;
 			addr.port = port;
-#if(YX_IS_TEST_VERSION==2)
-			kal_prompt_trace(MOD_YXAPP,"direct:%d:%d:%d:%d:%d,ipvalid:%d,soc:%d\r\n",addr.addr[0],addr.addr[1],addr.addr[2],addr.addr[3],addr.port,is_ip_valid,yxNetContext_ptr.sock);
-#endif
 			return YxAppSocketConnect(yxNetContext_ptr.sock,&addr);
 		}
 		if(soc_ip_check((kal_char*)host, addr.addr, &is_ip_valid) == KAL_FALSE)
@@ -3880,7 +3874,7 @@ S8 YxAppTcpConnectToServer(const S8* host, U16 port, S8 apn)
 	yxNetContext_ptr.apn = apn;
    // yxNetContext_ptr.port = port;
 	account_id = YxAppDtcntMakeDataAcctId(YX_APP_SIM1,NULL,apn,&(yxNetContext_ptr.appid));
-	kal_prompt_trace(MOD_YXAPP, "YxAppTcpConnectToServer %d\n", account_id);
+	//kal_prompt_trace(MOD_YXAPP, "YxAppTcpConnectToServer %d\n", account_id);
 	if(account_id==0)
 	{
 		yxNetContext_ptr.account_id = 0;
@@ -3892,7 +3886,7 @@ S8 YxAppTcpConnectToServer(const S8* host, U16 port, S8 apn)
     soc_init_win32();
 #endif
 	yxNetContext_ptr.sock = soc_create(SOC_PF_INET, SOC_SOCK_STREAM, 0, MOD_MMI, yxNetContext_ptr.account_id);
-	kal_prompt_trace(MOD_YXAPP, "YxAppTcpConnectToServer socket %d\n", yxNetContext_ptr.sock);
+	//kal_prompt_trace(MOD_YXAPP, "YxAppTcpConnectToServer socket %d\n", yxNetContext_ptr.sock);
 	if(yxNetContext_ptr.sock >= 0)
     {
         kal_uint8 val = KAL_TRUE;
@@ -3900,14 +3894,14 @@ S8 YxAppTcpConnectToServer(const S8* host, U16 port, S8 apn)
 		kal_int32 bufLen = YX_SOCK_BUFFER_LEN*2;
 		if(soc_setsockopt(yxNetContext_ptr.sock, SOC_SENDBUF, &bufLen, sizeof(bufLen)) < 0)
 		{
-			kal_prompt_trace(MOD_YXAPP, "soc_setsockopt SOC_SENDBUF\n");
+			//kal_prompt_trace(MOD_YXAPP, "soc_setsockopt SOC_SENDBUF\n");
 			YxAppCloseSocket(0);
 			return 2;
 		}
 		bufLen = YX_SOCK_READ_BUFFER_LEN*2;
 		if(soc_setsockopt(yxNetContext_ptr.sock, SOC_RCVBUF, &bufLen, sizeof(bufLen)) < 0)
 		{
-			kal_prompt_trace(MOD_YXAPP, "soc_setsockopt SOC_RCVBUF\n");
+			//kal_prompt_trace(MOD_YXAPP, "soc_setsockopt SOC_RCVBUF\n");
 			YxAppCloseSocket(0);
 			return 2;
 		}
@@ -3915,7 +3909,6 @@ S8 YxAppTcpConnectToServer(const S8* host, U16 port, S8 apn)
 		
         if(soc_setsockopt(yxNetContext_ptr.sock, SOC_NBIO, &val, sizeof(val)) < 0)
         {
-        		kal_prompt_trace(MOD_YXAPP, "soc_setsockopt SOC_NBIO\n");
 			YxAppCloseSocket(0);
 			return 2;
         }
@@ -3947,7 +3940,7 @@ S32 YxAppTcpSockRead(U8 *buf,S32 len)
     if(yxNetContext_ptr.socket_state != YX_NET_STATUS_CONN_CONNECTED)
         return 0; 
 
-	kal_prompt_trace(MOD_YXAPP,"YxAppTcpSockRead\n");
+	//kal_prompt_trace(MOD_YXAPP,"YxAppTcpSockRead\n");
     if((ret = soc_recv(yxNetContext_ptr.sock, buf, len, 0)) <= 0)
     {
         if(ret == SOC_WOULDBLOCK) {
@@ -3979,7 +3972,7 @@ S32 YxAppTcpSockWrite(U8 *buf, S32 len)
 	{
 		if(len < YX_SOCK_BUFFER_LEN)
 			sendLen = len;
-		kal_prompt_trace(MOD_YXAPP, "soc_send %d\n", len);
+		
 		if((ret = soc_send(yxNetContext_ptr.sock, buf, sendLen, 0)) < 0)
 		{
 			if(ret == SOC_WOULDBLOCK) {
@@ -3989,14 +3982,14 @@ S32 YxAppTcpSockWrite(U8 *buf, S32 len)
 				return -1;
 			
 		}
-		kal_prompt_trace(MOD_YXAPP,"YxAppTcpSockWrite th : %d id1:%x, id2:%x index:%d, size:%d \n", ret, buf[9], buf[10] ,buf[13], buf[30]*256 + buf[31]);
+		//kal_prompt_trace(MOD_YXAPP,"YxAppTcpSockWrite th : %d id1:%x, id2:%x index:%d, size:%d \n", ret, buf[9], buf[10] ,buf[13], buf[30]*256 + buf[31]);
 		//printf("%d : %c %d total:%d %d %d\n", __LINE__,voice[0], voice[13], voice[29], voice[30], voice[31]);
 		yxAppSockData.curSendLen += ret;
 		total += ret;
 		buf += ret;
 		len -= ret;
     }
-	kal_prompt_trace(MOD_YXAPP,"YxAppTcpSockWrite total : %d, curindex:%d \n",total , yxAppSockData.curSendLen);
+	//kal_prompt_trace(MOD_YXAPP,"YxAppTcpSockWrite total : %d, curindex:%d \n",total , yxAppSockData.curSendLen);
 	//ApolloAppSetRunFlag(YX_RUNKIND_OWNER_HEART);
 	//memset(YxProtocolGetBigBuffer(), 0, YX_BIG_MEMERY_LEN);
 	#else
@@ -4161,7 +4154,7 @@ S8 YxAppConnectToMyServer(void)
 	
 	//printf("yxNetContext_ptr.hostName");
 	YxAppGetServerParams((const kal_wchar*)path);
-	kal_prompt_trace(MOD_YXAPP,"hostName: %s, port:%d\n", yxNetContext_ptr.hostName, yxNetContext_ptr.port);
+	//kal_prompt_trace(MOD_YXAPP,"hostName: %s, port:%d\n", yxNetContext_ptr.hostName, yxNetContext_ptr.port);
 	port = YxAppGetHostNameAndPort(&hostname);
 
 #if(YX_NET_WAY==MAPN_NET)
@@ -4537,27 +4530,27 @@ static void YxAppGetServerParams(const U16 *rootfolder)
 		yxNetContext_ptr.port = YX_SERVER_PORT;
 		return;
 	#else
-		kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppGetServerParams \n");	
+		//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppGetServerParams \n");	
 		if ( apollo_key_ready == 0) {
 			memset((void*)filename, 0x00, 81);
 			//mmi_ucs2cpy((CHAR*)filename, (CHAR*)rootfolder);
 			mmi_ucs2cpy((CHAR*)filename, (CHAR*)APOLLO_DEVICE_KEY);
 			fh = FS_Open((const U16*)filename,FS_READ_ONLY);
-			kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppGetServerParams :%d\n", fh);	
+			//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppGetServerParams :%d\n", fh);	
 			if(fh >= FS_NO_ERROR) { //read apollo key
 				U32   new_file_len = 0,bytes_read=0;
 				U8    *data_buff = NULL;
 				U8 result = 0;
 
 				FS_GetFileSize(fh,&new_file_len);
-				kal_prompt_trace(MOD_YXAPP,"{wbj_debug} new_file_len :%d\n", (U8*)new_file_len);	
+				//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} new_file_len :%d\n", (U8*)new_file_len);	
 				if (new_file_len >= 16) {
 					data_buff = (U8*)OslMalloc(new_file_len);
 					FS_Read(fh,(void*)data_buff,new_file_len,&bytes_read);
-					kal_prompt_trace(MOD_YXAPP,"{wbj_debug} data_buff :%s\n", (U8*)data_buff);	
+					//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} data_buff :%s\n", (U8*)data_buff);	
 					result = checkApolloKey(data_buff, 16);
 					if (result == 0) {  //set server ip to download key
-						kal_prompt_trace(MOD_YXAPP,"{wbj_debug} checkApolloKey :%d\n", result);	
+						//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} checkApolloKey :%d\n", result);	
 						FS_Close(fh);
 
 						#if 0
@@ -4581,10 +4574,10 @@ static void YxAppGetServerParams(const U16 *rootfolder)
 					apollo_key_ready = 1;
 				}
 
-				kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppGetServerParams :%d\n", result);	
+				//kal_prompt_trace(MOD_YXAPP,"{wbj_debug} YxAppGetServerParams :%d\n", result);	
 			} else { //set server ip to download key
 				apollo_key_ready = 0;
-				kal_prompt_trace(MOD_YXAPP,"set server ip to download key\n");
+				//kal_prompt_trace(MOD_YXAPP,"set server ip to download key\n");
 				strcpy((char*)yxNetContext_ptr.hostName,(char*)APOLLO_BURNKEY_SERVER_IP);
 				yxNetContext_ptr.port = APOLLO_BURNKEY_SERVER_PORT;
 				return ;
@@ -4595,7 +4588,7 @@ static void YxAppGetServerParams(const U16 *rootfolder)
 				apollo_key_ready = 0;
 			}
 			
-			kal_prompt_trace(MOD_YXAPP,"set server ip to download key 11111\n");
+			//kal_prompt_trace(MOD_YXAPP,"set server ip to download key 11111\n");
 			#if 0
 			strcpy((char*)yxNetContext_ptr.hostName,(char*)YX_DOMAIN_NAME_DEFAULT);
 			yxNetContext_ptr.port = YX_SERVER_PORT;
@@ -4652,8 +4645,8 @@ char YxAgpsDataWriteToIc(U8 *buffer,U16 DataLen)
 {
 	if(DataLen>20)
 	{
-		//buffer += 8;
-		//DataLen -= 8;
+		buffer += 8;
+		DataLen -= 8;
 		YxAppUartSendData(buffer,DataLen);//write to ic
 		return 1;
 	}
@@ -9622,7 +9615,7 @@ void ApolloLabDataCallback(void) {
 		#endif
 		return;
 	}
-	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT/5, ApolloLabDataCallback);
+	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT/10, ApolloLabDataCallback);
 }
 
 void ApolloStartLab(void) {
@@ -9630,30 +9623,34 @@ void ApolloStartLab(void) {
 	lbs_start();
 	u8GpsProgress = 2;
 	kal_prompt_trace(MOD_YXAPP," aaaaaaaaaaaa ApolloStartLab\n");
-	if (u8NeedInitAgpsDataFlag == 0x01) {
-		StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT, ApolloLabDataCallback);
-	} else {
-		StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT / 10, ApolloLabDataCallback);
-	}
+	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT / 10, ApolloLabDataCallback);
+	
 #else
 	ApolloStartWifi();
 #endif
 }
 
+U8 u8AgpsDataReLabIndex = 0;
+
 void ApolloGPSDataCallback(void) {	
 	StopTimer(APOLLO_GPS_START_COUNTER_TIMER);
-	if (++u8StatusCounter == 30) { // 50s
+	if (++u8StatusCounter == 50) { // 50s
 		u8StatusCounter = 0;
 		PosType &= ~0x01;
 		
 		gps_end();
 		ApolloStartLab();
+		if (++u8AgpsDataReLabIndex > 4) {
+			u8NeedInitAgpsDataFlag = 0x03;
+			u8AgpsDataReLabIndex = 0;
+		}
 		return ;
 	}
-	kal_prompt_trace(MOD_YXAPP,"ApolloGPSDataCallback\n");
+	//kal_prompt_trace(MOD_YXAPP,"ApolloGPSDataCallback\n");
 	if (GPS_DATA_STATUS_OK == gps_get_data_status_flag()) {
 		U8 i = 0;
 		kal_prompt_trace(MOD_YXAPP,"gps_get_data_status_flag\n");
+		u8AgpsDataReLabIndex = 0;
 		
 		for (i = 0;i < 10;i ++) {
 			LatLongValue[i] = JW_value[i];
@@ -9670,12 +9667,57 @@ void ApolloGPSDataCallback(void) {
 	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT / 10, ApolloGPSDataCallback);
 }
 
+//extern U32 getSecondOff(void);
+extern int dateDiff(struct SampleDate mindate, struct SampleDate maxdate);
+
+U8 ApolloAgpsDataIsTimeOut(U8 *buf) {
+	struct SampleDate agpsTime = {0};
+	struct SampleDate nowTime = {0};
+	int Sec = 0;
+	int diff = 0;
+	applib_time_struct   dt;
+	applib_dt_get_date_time(&dt);
+
+	dt.nYear = (dt.nYear > 2000 ? dt.nYear : (2000 + dt.nYear % 100));
+	nowTime.year = dt.nYear;
+	nowTime.month = dt.nMonth;
+	nowTime.day = dt.nDay;
+#if 0	
+	kal_prompt_trace(MOD_YXAPP,"now year:%d, month:%d, day:%d\n", 
+		nowTime.year, nowTime.month, nowTime.day);
+	kal_prompt_trace(MOD_YXAPP,"now hour:%d, min:%d, sec:%d\n", 
+		dt.nHour, dt.nMin, dt.nSec);
+#endif
+	agpsTime.year = (int)(buf[0] + 2000);
+	agpsTime.month = buf[1];
+	agpsTime.day = buf[3];
+#if 0
+	kal_prompt_trace(MOD_YXAPP,"now year:%d, month:%d, day:%d\n", 
+		agpsTime.year, agpsTime.month, agpsTime.day);
+	kal_prompt_trace(MOD_YXAPP,"now hour:%d, min:%d, sec:%d\n", 
+		buf[4], buf[5], buf[6]);
+#endif
+	diff = dateDiff (agpsTime, nowTime);
+
+	Sec = diff*24*60*60 + (dt.nHour-buf[4])*60*60 + (dt.nMin-buf[5])*60 + (dt.nSec-buf[6]);
+
+	if (Sec > 900) {
+		return 1;
+	} else if (Sec < 0) {
+		u8NeedInitWatchTimeFlag = 0x02;
+		return 1;
+	}
+	return 0;
+}
+
 void ApolloStartGPS(void) {
 	PosType = 0;
 	gps_start();	
 	u8GpsProgress = 1;
 #if (YX_GPS_USE_AGPS == 1)
-	kal_prompt_trace(MOD_YXAPP,"yxAgpsDatLen:%d\n", yxGpsParam.yxAgpsDatLen);
+	if (ApolloAgpsDataIsTimeOut(yxGpsParam.yxAgpsDataBuf)) {
+		u8NeedInitAgpsDataFlag = 0x02;
+	} 
 	YxAgpsDataWriteToIc(yxGpsParam.yxAgpsDataBuf,yxGpsParam.yxAgpsDatLen);
 #endif	
 	StartTimer(APOLLO_GPS_START_COUNTER_TIMER, YX_HEART_TICK_UNIT / 10, ApolloGPSDataCallback);
