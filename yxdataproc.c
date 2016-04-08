@@ -672,9 +672,12 @@ U32 getSecondOff(void) {
 	struct SampleDate beginTime = {2010, 1, 1};
 	struct SampleDate nowTime = {0};
 	applib_time_struct   dt;
+	rtc_format_struct	Rtc;
 	int diff = 0;
-	
-	applib_dt_get_date_time(&dt);
+
+	mmiClockGetDateTime(&Rtc);
+	mmiClockRtcToApplib(&Rtc, &dt);
+	//applib_dt_get_date_time(&dt);
 
 	dt.nYear = (dt.nYear > 2000 ? dt.nYear : (2000 + dt.nYear % 100) );
 
@@ -1689,6 +1692,8 @@ extern U8 u8GpsProgress;
 extern WatchConf WatchInstance;
 extern void gps_start(void);
 extern void ApolloGPSDataCallback(void);
+extern void ApolloStartLab(void);
+
 int ApolloWatchSave(void);
 #if ENABLE_MMI_INITTIME
 extern U8 u8NeedInitWatchTimeFlag;
@@ -1696,7 +1701,7 @@ extern U8 u8NeedInitWatchTimeFlag;
 
 
 char phonenumber[20] = {0};
-
+extern void mmiFrameBufferReflushTimer(void);
 
 S32 YxAppSockReadDataCallback(U8 *readBuf,U16 readLen,U8 *sendBuffer)//readBuf:´Ó·þÎñÆ÷¶ÁÈ¡µÄÊý¾Ý,readLen:Êý¾Ý³¤¶È,¿ÉÒÔÔÚ´Ë´¦ÀíÄãÃÇµÄÊý¾ÝÐ­Òé,sendBuffer:Èç¹ûÓÐÊý¾ÝÒªÉÏ´«µ½·þÎñÆ÷ÉÏ,ÇëÌîÐ´Êý¾Ýµ½´ËBUFFERÖÐ,×¢Òâ,´ËBUFFERµÄ×î´ó³¤¶ÈÎªYX_SOCK_BUFFER_LEN,·µ»ØÖµÎª0Ê±,²»ÒªÉÏ´«Êý¾Ý£¬°´SENDBUFFERµÄÊµ¼Ê³¤¶È×Ö½Ú·µ»Ø
 {
@@ -1717,17 +1722,24 @@ S32 YxAppSockReadDataCallback(U8 *readBuf,U16 readLen,U8 *sendBuffer)//readBuf:´
 		if ((readLen > 6) && u8NeedInitWatchTimeFlag) {
 			rtc_format_struct rtcTime = {0};
 			rtcTime.rtc_year = readBuf[6];
-			rtcTime.rtc_mon = readBuf[7];
+			rtcTime.rtc_mon = readBuf[7]+1;
 			rtcTime.rtc_wday = readBuf[8];
 			rtcTime.rtc_day = readBuf[9];
 			rtcTime.rtc_hour = readBuf[10];
 			rtcTime.rtc_min = readBuf[11];
 			rtcTime.rtc_sec = readBuf[12];
 
-			SetDateTime(&rtcTime);
-			//u8NeedInitWatchTimeFlag = 0x0;
+			mmiClockSetDateTime(&rtcTime);
+			if (u8NeedInitWatchTimeFlag == 0x01) {
+				//ApolloStartGPS();
+				mmiFrameBufferReflushTimer();
+				//YxAppSendMsgToMMIMod(APOLLO_MSG_LED_REFLASH,0,0);
+				ApolloStartLab();
+			}
+			u8NeedInitWatchTimeFlag = 0x2;
 
-			YxAppSendMsgToMMIMod(APOLLO_MSG_LED_REFLASH,0,0);
+			
+			//u8NeedInitWatchTimeFlag = 0;
 		}
 		ApolloAppSetRunFlag(APOLLO_RUNKIND_HEART_COMPLETE);
 		return 1;

@@ -282,7 +282,7 @@ void YxAppIdleInition(void)
 	//ApolloMinuteTimerCallback();
 	//StartTimer(APOLLO_MINUTE_TIMER, YX_HEART_TICK_UNIT * 72, ApolloMinuteTimerCallback);
 	//StartTimer(APOLLO_GPS_ONOFF_TIMER, YX_HEART_TICK_UNIT * 36, ApolloStartGPS);
-	ApolloStartLocationTimer(WatchInstance.u8Freq);
+	ApolloStartLocationTimer(4);
 	//yxAppExit = 0;
 	
 	yxAppParam->sleephandle = L1SM_GetHandle();
@@ -316,7 +316,7 @@ void YxAppIdleInition(void)
 	yxGpsParam.yxAgpsDatLen = YxAppGetAgpsData(yxGpsParam.yxAgpsDataBuf,AGPS_MAX_RECEIVE_BUFFER_LEN);
 	u8NeedInitAgpsDataFlag = 0x01;
 	//ApolloStartLab();
-	ApolloStartGPS();
+	//ApolloStartGPS();
 		//StartTimer( YX_HEART_TICK_UNIT*2,ApolloStartLab);
 #endif
 	

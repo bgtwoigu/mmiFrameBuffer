@@ -255,6 +255,51 @@ U8 diedao_key = 0;
 U32 step_num = 0;
 U32 sleep_quality = 0;
 //unsigned int Step_num = 0;
+#if ENABLE_MMI_APOLLOCLOCK
+rtc_format_struct rtcTimeInstance = {0};
+
+void mmiClockSetDateTime(rtc_format_struct *pTime) {
+	rtcTimeInstance.rtc_year = pTime->rtc_year;
+	rtcTimeInstance.rtc_mon = pTime->rtc_mon;
+	rtcTimeInstance.rtc_day = pTime->rtc_day;
+	rtcTimeInstance.rtc_wday = pTime->rtc_wday;
+	rtcTimeInstance.rtc_hour = pTime->rtc_hour;
+	rtcTimeInstance.rtc_min = pTime->rtc_min;
+	rtcTimeInstance.rtc_sec = pTime->rtc_sec;
+}
+
+void mmiClockGetDateTime(rtc_format_struct *pTime) {
+	pTime->rtc_year = rtcTimeInstance.rtc_year;
+	pTime->rtc_mon = rtcTimeInstance.rtc_mon;
+	pTime->rtc_day = rtcTimeInstance.rtc_day;
+	pTime->rtc_wday = rtcTimeInstance.rtc_wday;
+	pTime->rtc_hour = rtcTimeInstance.rtc_hour;
+	pTime->rtc_min = rtcTimeInstance.rtc_min;
+	pTime->rtc_sec = rtcTimeInstance.rtc_sec;
+}
+
+void mmiClockApplibToRtc(applib_time_struct *pLib, rtc_format_struct *pRtc) {
+	pRtc->rtc_year = (char)(pLib->nYear % 100);
+	pRtc->rtc_mon = pLib->nMonth;
+	pRtc->rtc_wday = pLib->DayIndex;
+	pRtc->rtc_day = pLib->nDay;
+	pRtc->rtc_hour = pLib->nHour;
+	pRtc->rtc_min = pLib->nMin;
+	pRtc->rtc_sec = pLib->nSec;
+}
+
+void mmiClockRtcToApplib(rtc_format_struct *pRtc, applib_time_struct *pLib) {
+	pLib->nYear = pRtc->rtc_year;
+	pLib->nMonth = pRtc->rtc_mon;
+	pLib->DayIndex = pRtc->rtc_wday;
+	pLib->nDay = pRtc->rtc_day;
+	pLib->nHour = pRtc->rtc_hour;
+	pLib->nMin = pRtc->rtc_min;
+	pLib->nSec = pRtc->rtc_sec;
+}
+
+
+#endif
 
 #endif
 
@@ -576,6 +621,8 @@ void ApolloStartLocationTimer(char timeType) {
 		StartTimer(APOLLO_GPS_ONOFF_TIMER, YX_HEART_TICK_UNIT * 600, ApolloStartGPS);
 	} else if (timeType == 3) {
 		StartTimer(APOLLO_GPS_ONOFF_TIMER, YX_HEART_TICK_UNIT * 6, ApolloStartGPS);
+	} else if (timeType == 4) {
+		StartTimer(APOLLO_GPS_ONOFF_TIMER, YX_HEART_TICK_UNIT * 24, ApolloStartGPS);
 	} else {
 		StartTimer(APOLLO_GPS_ONOFF_TIMER, YX_HEART_TICK_UNIT * 6, ApolloStartGPS);
 	}
@@ -790,7 +837,6 @@ void mmiFrameBufferScroll(void) {
 		}
 	}
 	u8ScrollDisplayIndex ++;
-
 	gdi_layer_blt_previous(0, 0, MMI_FRAMEBUFFER_PANEL_WIDTH, MMI_FRAMEBUFFER_PANEL_HIGH);
 
 	StartTimer(APOLLO_MMI_FRAMEBUFFER_SCROLL_TIMER, 500, mmiFrameBufferScroll);
@@ -840,7 +886,7 @@ U8 mmiFrameBufferDisplayData(int x, int y, U32 u32Data, U8 bZero) {
 void mmiFrameBufferMainPageDateDisplay(applib_time_struct *pDt) {
 	U8 u8BitCnt = 0, u8TempCut;
 
-	u8BitCnt = mmiFrameBufferDisplayData(MMI_FRAMEBUFFER_MAINPAGE_DATE_X, MMI_FRAMEBUFFER_MAINPAGE_DATE_Y ,(U32)(pDt->nYear-2000), 1);
+	u8BitCnt = mmiFrameBufferDisplayData(MMI_FRAMEBUFFER_MAINPAGE_DATE_X, MMI_FRAMEBUFFER_MAINPAGE_DATE_Y ,(U32)(pDt->nYear%100), 1);
 
 	mmiFrameBufferDisplayFont((MMI_FRAMEBUFFER_MAINPAGE_DATE_X+u8BitCnt*MMI_FRAMEBUFFER_DATA_WIDTH), MMI_FRAMEBUFFER_MAINPAGE_DATE_Y, DB_SYMBOL_SLASH);
 	u8BitCnt += 1;
@@ -882,16 +928,24 @@ U8 mmiFrameBufferComputeWeek(applib_time_struct *pDt) {
 }
 
 void mmiFrameBufferMainPageWeekDisplay(applib_time_struct *pDt) {
-	U8 u8Week = mmiFrameBufferComputeWeek(pDt);
+	//U8 u8Week = mmiFrameBufferComputeWeek(pDt);
 
 	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_MAINPAGE_WEEK_X, MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y, DB_FONT_XING);
 	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_MAINPAGE_WEEK_X + MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y, DB_FONT_QI);
-	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_MAINPAGE_WEEK_X + 2 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y, DB_FONT_RI+u8Week);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_MAINPAGE_WEEK_X + 2 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y, DB_FONT_RI+pDt->DayIndex);
 }
 
 void mmiFrameBufferMainPageTimeDisplay(void) {
-	applib_time_struct   dt;
-	applib_dt_get_date_time(&dt);
+	rtc_format_struct   pRtc;
+	applib_time_struct 	dt;
+	//applib_dt_get_date_time(&dt);
+	mmiClockGetDateTime(&pRtc);
+	if (pRtc.rtc_year == 0x0) {
+		applib_dt_get_date_time(&dt);
+	} else {
+		//mmiClockApplibToRtc
+		mmiClockRtcToApplib(&pRtc, &dt);
+	}
 
 	mmiFrameBufferMainPageDateDisplay(&dt);
 	mmiFrameBufferMainPageClockDisplay(&dt);
@@ -1130,6 +1184,12 @@ void mmiFrameBufferReflush(void) {
 	}
 }
 
+void mmiFrameBufferReflushTimer(void) {
+	StopTimer(APOLLO_MMI_FRAMEBUFFER_REFLUSH_TIMER);
+	YxAppSendMsgToMMIMod(APOLLO_MSG_LED_REFLASH,0,0);
+	StartTimer(APOLLO_MMI_FRAMEBUFFER_REFLUSH_TIMER, YX_HEART_TICK_UNIT*12, mmiFrameBufferReflushTimer);
+}
+
 void mmiFrameBufferInit(void) {
 	u8LcdUiStatusIndex = LCD_UI_STATUS_MAIN_MENU;
 	mmiFrameBufferReflush();
@@ -1146,28 +1206,28 @@ void mmiKeyPadEventDownKeyB(void) {
 	//mmiFrameBufferSOSDisplay();
 	if (u8LcdUiStatusIndex == LCD_UI_STATUS_MAIN_MENU) {
 		u8LcdUiStatusIndex = LCD_UI_STATUS_COUNTS;
-		mmiFrameBufferReflush();
+		//mmiFrameBufferReflush();
 	} else if (u8LcdUiStatusIndex == LCD_UI_STATUS_COUNTS) {
 		u8LcdUiStatusIndex = LCD_UI_STATUS_MAIN_MENU;
-		mmiFrameBufferReflush();
+		//mmiFrameBufferReflush();
 	} else if (u8LcdUiStatusIndex == LCD_UI_STATUS_SOS) {
 		u8LcdUiStatusIndex = LCD_UI_STATUS_MAIN_MENU;
-		mmiFrameBufferReflush();
+		//mmiFrameBufferReflush();
 	} else if (u8LcdUiStatusIndex == LCD_UI_STATUS_CONTACT) {
 		memset(u8ContactPhoneBook, 0, PHONE_NUMBER_LENGTH);
 		u8PhoneBookIndex = -1;
 	
 		u8LcdUiStatusIndex = LCD_UI_STATUS_MAIN_MENU;
-		mmiFrameBufferReflush();
+		//mmiFrameBufferReflush();
 	} else if (u8LcdUiStatusIndex == LCD_UI_STATUS_CALLOUT) {
 		memset(u8ContactPhoneBook, 0, PHONE_NUMBER_LENGTH);
 		u8PhoneBookIndex = -1;
 	
 		u8LcdUiStatusIndex = LCD_UI_STATUS_MAIN_MENU;
-		mmiFrameBufferReflush();
 
 		mmi_ucm_outgoing_call_endkey();
 	}
+	mmiFrameBufferReflush();
 }
 
 void mmiKeyPadEventUpKeyB(void) {
@@ -9676,7 +9736,10 @@ U8 ApolloAgpsDataIsTimeOut(U8 *buf) {
 	int Sec = 0;
 	int diff = 0;
 	applib_time_struct   dt;
-	applib_dt_get_date_time(&dt);
+	rtc_format_struct 	rtc;
+	//applib_dt_get_date_time(&dt);
+	mmiClockGetDateTime(&rtc);
+	mmiClockRtcToApplib(&rtc, &dt);
 
 	dt.nYear = (dt.nYear > 2000 ? dt.nYear : (2000 + dt.nYear % 100));
 	nowTime.year = dt.nYear;
@@ -9689,7 +9752,7 @@ U8 ApolloAgpsDataIsTimeOut(U8 *buf) {
 		dt.nHour, dt.nMin, dt.nSec);
 #endif
 	agpsTime.year = (int)(buf[0] + 2000);
-	agpsTime.month = buf[1];
+	agpsTime.month = buf[1]+1;
 	agpsTime.day = buf[3];
 #if 0
 	kal_prompt_trace(MOD_YXAPP,"now year:%d, month:%d, day:%d\n", 
@@ -9701,7 +9764,7 @@ U8 ApolloAgpsDataIsTimeOut(U8 *buf) {
 
 	Sec = diff*24*60*60 + (dt.nHour-buf[4])*60*60 + (dt.nMin-buf[5])*60 + (dt.nSec-buf[6]);
 
-	if (Sec > 900) {
+	if (Sec > 1800) {
 		return 1;
 	} else if (Sec < 0) {
 		u8NeedInitWatchTimeFlag = 0x02;
