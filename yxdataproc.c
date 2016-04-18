@@ -124,7 +124,9 @@ extern void YxAppSendSmsIntenal(S8* number,char gsmCode,U16* content);//ucs2
 extern void CALL_incoming(void);
 extern U8 mmiKeyPadIsExistPhoneNumber(char *u8PhoneNumber);
 extern void mmi_ucm_incoming_call_sendkey(void);
-
+extern S8 u8CallInPhoneNumber[PHONE_NUMBER_LENGTH];
+extern int u8CallInNumberLength ;
+extern U8 u8LcdUiStatusIndex;
 
 kal_bool YxAppCallNumberIsAllowed(char callType,S8 *number)//callType:1:À´µç.ºÅÂëÎªASCIIÂë,·µ»ØTRUE:ÔÊÐí,FASE:½ûÖ¹
 {
@@ -182,6 +184,13 @@ kal_bool YxAppCallNumberIsAllowed(char callType,S8 *number)//callType:1:À´µç.ºÅÂ
 		StartTimer(CALL_TIMER, 10000, mmi_ucm_incoming_call_sendkey);
 		return KAL_TRUE;
 	} else if (mmiKeyPadIsExistPhoneNumber(number)) {
+		memset(u8CallInPhoneNumber, 0, PHONE_NUMBER_LENGTH);
+		strcpy (u8CallInPhoneNumber, number);
+		u8CallInNumberLength = strlen(u8CallInPhoneNumber);
+		
+		u8LcdUiStatusIndex = LCD_UI_STATUS_CALLIN;	
+		YxAppSendMsgToMMIMod(APOLLO_MSG_LED_REFLASH,0,0);
+		
 		StartTimer(CALL_TIMER, 10000, mmi_ucm_incoming_call_sendkey);
 		return KAL_TRUE;
 	} else {
@@ -1747,7 +1756,7 @@ S32 YxAppSockReadDataCallback(U8 *readBuf,U16 readLen,U8 *sendBuffer)//readBuf:´
 			}
 			if (u8NeedInitWatchTimeFlag == 0x01) {
 				//ApolloStartGPS();
-				mmiFrameBufferReflushTimer();
+				//mmiFrameBufferReflushTimer();
 				//YxAppSendMsgToMMIMod(APOLLO_MSG_LED_REFLASH,0,0);
 				ApolloStartLab();
 			}

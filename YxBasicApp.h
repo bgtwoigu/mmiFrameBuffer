@@ -905,6 +905,18 @@ typedef struct _WATCHCONF {
 } WatchConf;
 
 
+enum {
+	LCD_UI_STATUS_MAIN_MENU = 0x01,
+	LCD_UI_STATUS_CONTACT 	= 0x02,
+	LCD_UI_STATUS_COUNTS	= 0x03,
+	LCD_UI_STATUS_SOS		= 0x04,
+	LCD_UI_STATUS_CALLOUT 	= 0x05,
+	LCD_UI_STATUS_CALLIN	= 0x06,
+	LCD_UI_STATUS_FALLDOWN 	= 0x07,
+	LCD_UI_STATUS_NOCONTACTS = 0x08,
+};
+
+
 
 #define isPrime(year) ((year%4==0&&year%100!=0)||(year%400==0))  
 struct SampleDate  {  

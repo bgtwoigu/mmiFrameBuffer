@@ -233,6 +233,8 @@ void test(void)
 	srv_gpio_setting_set_bl_time(10);
 }
 
+
+
 extern void ApolloMinuteTimerCallback(void) ;
 extern void ApolloStartGPS(void) ;
 extern int ApolloWatchConfig(void);
@@ -499,6 +501,7 @@ char checkApolloFlagStatus(void) {
 	}
 }
 
+extern U8 u8Time;
 void YxAppUploadHeartProc(void)
 {
 	//YXSYSTEMPARAM     *yxSetting = YxAppGetSystemParam(0);	

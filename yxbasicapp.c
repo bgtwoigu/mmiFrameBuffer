@@ -651,6 +651,7 @@ void ApolloInitTime(void) {
 /* ** **** ******** **************** ******************************** LED ******************************** **************** ******** **** ** */
 #if ENABLE_MMI_FRAMEBUFFER
 
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 #define MMI_FRAMEBUFFER_FONT_WIDTH		16
 #define MMI_FRAMEBUFFER_FONT_HIGH		16
 #define MMI_FRAMEBUFFER_DATA_WIDTH		8
@@ -676,6 +677,10 @@ void ApolloInitTime(void) {
 
 #define MMI_FRAMEBUFFER_CONTACTS_FONT_X		16
 #define MMI_FRAMEBUFFER_CONTACTS_FONT_Y		40
+
+#define MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_X		0
+#define MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_Y		80
+
 
 #define MMI_FRAMEBUFFER_COUNTSTEP_ICON_X		16
 #define MMI_FRAMEBUFFER_COUNTSTEP_ICON_Y		30
@@ -703,19 +708,74 @@ void ApolloInitTime(void) {
 
 #define MMI_FRAMEBUFFER_DATA_COUNT		(MMI_FRAMEBUFFER_PANEL_WIDTH/MMI_FRAMEBUFFER_DATA_WIDTH)
 
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
 
-enum {
-	LCD_UI_STATUS_MAIN_MENU = 0x01,
-	LCD_UI_STATUS_CONTACT 	= 0x02,
-	LCD_UI_STATUS_COUNTS	= 0x03,
-	LCD_UI_STATUS_SOS		= 0x04,
-	LCD_UI_STATUS_CALLOUT 	= 0x05,
-	LCD_UI_STATUS_CALLIN	= 0x06,
-	LCD_UI_STATUS_FALLDOWN 	= 0x07,
-};
+#define MMI_FRAMEBUFFER_FONT_WIDTH		32
+#define MMI_FRAMEBUFFER_FONT_HIGH		32
+#define MMI_FRAMEBUFFER_DATA_WIDTH		16
+
+#define MMI_FRAMEBUFFER_PANEL_WIDTH		240
+#define MMI_FRAMEBUFFER_PANEL_HIGH		240
+
+#define MMI_FRAMEBUFFER_SIGNAL_X		155
+#define MMI_FRAMEBUFFER_SIGNAL_Y		0
+
+#define MMI_FRAMEBUFFER_BATTERY_X		10
+#define MMI_FRAMEBUFFER_BATTERY_Y		0
+
+
+#define MMI_FRAMEBUFFER_MAINPAGE_DATE_X		56
+#define MMI_FRAMEBUFFER_MAINPAGE_DATE_Y		60
+
+#define MMI_FRAMEBUFFER_MAINPAGE_CLOCK_X	80
+#define MMI_FRAMEBUFFER_MAINPAGE_CLOCK_Y	(MMI_FRAMEBUFFER_MAINPAGE_DATE_Y+MMI_FRAMEBUFFER_FONT_HIGH)
+
+#define MMI_FRAMEBUFFER_MAINPAGE_WEEK_X		72
+#define MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y		(MMI_FRAMEBUFFER_MAINPAGE_CLOCK_Y + MMI_FRAMEBUFFER_FONT_HIGH + 8)
+
+#define MMI_FRAMEBUFFER_CONTACTS_FONT_X		96
+#define MMI_FRAMEBUFFER_CONTACTS_FONT_Y		80
+
+#define MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_X		31
+#define MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_Y		120
+
+
+#define MMI_FRAMEBUFFER_COUNTSTEP_ICON_X		88
+#define MMI_FRAMEBUFFER_COUNTSTEP_ICON_Y		60
+
+#define MMI_FRAMEBUFFER_COUNTSTEP_DATA_X		56
+#define MMI_FRAMEBUFFER_COUNTSTEP_DATA_Y		160
+#define MMI_FRAMEBUFFER_COUNTSTEP_DATA_WIDTH	128
+
+#define MMI_FRAMEBUFFER_SOS_X					80
+#define MMI_FRAMEBUFFER_SOS_Y					80
+
+#define MMI_FRAMEBUFFER_STATUSPROCESS_X			24
+#define MMI_FRAMEBUFFER_STATUSPROCESS_Y			160
+#define MMI_FRAMEBUFFER_STATUSPROCESS_COUNT		12
+
+#define MMI_FRAMEBUFFER_CALLOUT_X					56
+#define MMI_FRAMEBUFFER_CALLOUT_Y					60
+
+#define MMI_FRAMEBUFFER_CALLIN_X					56
+#define MMI_FRAMEBUFFER_CALLIN_Y					60
+
+#define MMI_FRAMEBUFFER_NOCONTACTS_X				40
+#define MMI_FRAMEBUFFER_NOCONTACTS_Y				80
+
+
+#define MMI_FRAMEBUFFER_FALLDOWN_X					32
+#define MMI_FRAMEBUFFER_FALLDOWN_Y					80
+
+
+#define MMI_FRAMEBUFFER_DATA_COUNT		(MMI_FRAMEBUFFER_PANEL_WIDTH/MMI_FRAMEBUFFER_DATA_WIDTH)
+
+
+#endif
+
 
 static U8 u8ContactsIndex = 0;
-static U8 u8LcdUiStatusIndex = LCD_UI_STATUS_MAIN_MENU;
+U8 u8LcdUiStatusIndex = LCD_UI_STATUS_MAIN_MENU;
 /** Scroll **/
 static char u8ScrollDisplayIndex = 0;
 static U8 *u8ScrollDisplayString = NULL;
@@ -730,6 +790,53 @@ U8 bStatusProcessDynDisplay = 1; //APOLLO_MMI_FRAMEBUFFER_STATUSPROCESS_TIMER
 /** Function Define **/
 void mmiFrameBufferDisplayFont(int x, int y, U16 FontCode);
 void mmiFrameBufferClearDisplay(void);
+void mmiFrameBufferDisplayImage(int x, int y, U16 ImageCode);
+void mmiFrameBufferReflush(void);
+
+
+/////////////////////////////LCD240*240///////////////////////////////////////////
+
+extern unsigned char dis_onoff_flag;//0:不显示  1:自定义显示  2:开机  3:关机
+extern unsigned char gImage_001[240*30];
+void lcd_240240_clear(void)
+{
+	clear_screen_with_color(UI_COLOR_BLACK);
+	{
+		long i;
+		for(i=0;i<(240*30);i++)
+			gImage_001[i] = 0;
+	}
+}
+void lcd_240240_draw_point(unsigned int x , unsigned int y, unsigned char color)
+{
+#if 0 //Update By WangBoJing
+	if( (x<64) && (y<128) )
+	{
+		if(color)
+			gui_putpixel(x,y,UI_COLOR_WHITE);
+		else 
+			gui_putpixel(x,y,UI_COLOR_BLACK);
+	}	
+	else
+	{
+		if(color)
+			gImage_001[y*30+x/8] |=  ( 1<<(x%8) );
+		else
+			gImage_001[y*30+x/8] &= ~( 1<<(x%8) );
+	}
+#else
+	if(color)
+		gImage_001[y*30+x/8] |=  ( 1<<(x%8) );
+	else
+		gImage_001[y*30+x/8] &= ~( 1<<(x%8) );
+#endif
+}
+void lcd_240240_refresh_all(void)
+{
+	dis_onoff_flag = 1;
+	gdi_layer_blt_previous(0, 0, 64 - 1, 128 - 1);//刷整个屏幕
+}
+/////////////////////////////LCD240*240///////////////////////////////////////////
 
 /*
  * SI_VIB.bmp	signal 0 IMG_SI_VIBRATE
@@ -743,7 +850,7 @@ void mmiFrameBufferDisplayControls_Signal(U8 u8Signal)
 {
 	unsigned char temp;
 	temp = u8Signal/10;	
-	
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 	switch(temp)
 	{
 		case 0:gdi_image_draw_id(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, IMG_SI_VIBRATE);
@@ -760,6 +867,28 @@ void mmiFrameBufferDisplayControls_Signal(U8 u8Signal)
 			gdi_image_draw_id(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, IMG_SI_EARPHONE_INDICATOR);
 			break;
 	}
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+	switch(temp) {
+		case 0:			
+			mmiFrameBufferDisplayImage(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, DB_IMAGE_SIGNAL_0); //+temp%5
+			break;
+		case 1:			
+			mmiFrameBufferDisplayImage(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, DB_IMAGE_SIGNAL_1); //+temp%5
+			break;
+		case 2:			
+			mmiFrameBufferDisplayImage(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, DB_IMAGE_SIGNAL_2); //+temp%5
+			break;
+		case 3:			
+			mmiFrameBufferDisplayImage(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, DB_IMAGE_SIGNAL_3); //+temp%5
+			break;
+		case 4:			
+			mmiFrameBufferDisplayImage(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, DB_IMAGE_SIGNAL_4); //+temp%5
+			break;
+		default:	
+			mmiFrameBufferDisplayImage(MMI_FRAMEBUFFER_SIGNAL_X, MMI_FRAMEBUFFER_SIGNAL_Y, DB_IMAGE_SIGNAL_4); //+temp%5
+			break;
+	}
+#endif
 }
 
 /*
@@ -772,6 +901,7 @@ void mmiFrameBufferDisplayControls_Signal(U8 u8Signal)
 void mmiFrameBufferDisplayControls_Battery(U8 u8Battery)
 {
 	//U8 u8Battery = srv_charbat_get_battery_level();
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 	switch(u8Battery)
 	{
 	case 0:
@@ -793,6 +923,26 @@ void mmiFrameBufferDisplayControls_Battery(U8 u8Battery)
 		break;
 		
 	}
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+	switch(u8Battery)
+	{
+	case 0:
+	case 1:
+	case 2:
+		mmiFrameBufferDisplayImage(MMI_FRAMEBUFFER_BATTERY_X, MMI_FRAMEBUFFER_BATTERY_Y, DB_IMAGE_BAT_0); //+ ((u8Battery%7 > 2) ? u8Battery-2 : 0)
+		break;
+	case 3:
+		mmiFrameBufferDisplayImage(MMI_FRAMEBUFFER_BATTERY_X, MMI_FRAMEBUFFER_BATTERY_Y, DB_IMAGE_BAT_1); //+ ((u8Battery%7 > 2) ? u8Battery-2 : 0)
+		break;
+	case 4:
+		mmiFrameBufferDisplayImage(MMI_FRAMEBUFFER_BATTERY_X, MMI_FRAMEBUFFER_BATTERY_Y, DB_IMAGE_BAT_2); //+ ((u8Battery%7 > 2) ? u8Battery-2 : 0)
+		break;
+	case 5:
+	case 6:
+		mmiFrameBufferDisplayImage(MMI_FRAMEBUFFER_BATTERY_X, MMI_FRAMEBUFFER_BATTERY_Y, DB_IMAGE_BAT_3); //+ ((u8Battery%7 > 2) ? u8Battery-2 : 0)
+		break;
+	}
+#endif
 }
 
 static U8 u8ChargingStatus = 2;
@@ -826,7 +976,11 @@ void mmiFrameBufferScroll(void) {
 	//clear
 	for (i = 0;i < MMI_FRAMEBUFFER_FONT_HIGH;i ++) {
 		for (j = 0;j < MMI_FRAMEBUFFER_PANEL_WIDTH;j ++) {
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 			gui_putpixel(j,u8ScrollDisplayHigh+i,UI_COLOR_BLACK);
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+			lcd_240240_draw_point(j,u8ScrollDisplayHigh+i,1);
+#endif
 		}
 	}
 	for (i = 0;i < MMI_FRAMEBUFFER_DATA_COUNT;i ++) {
@@ -839,21 +993,43 @@ void mmiFrameBufferScroll(void) {
 		}
 	}
 	u8ScrollDisplayIndex ++;
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 	gdi_layer_blt_previous(0, 0, MMI_FRAMEBUFFER_PANEL_WIDTH, MMI_FRAMEBUFFER_PANEL_HIGH);
-
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+	lcd_240240_refresh_all();
+#endif
 	StartTimer(APOLLO_MMI_FRAMEBUFFER_SCROLL_TIMER, 500, mmiFrameBufferScroll);
 }
 
+void mmiFrameBufferDisplayPhoneNumberData(int x, int y, U8 *u8NumString, int length) {
+	int i = 0;
+	U8 *pNum = u8NumString;
+
+	if (*u8NumString == '0' && *(u8NumString+1) == '0' && *(u8NumString+2) == '8' && *(u8NumString+3) == '6') {
+		length = length - 4;
+		pNum = u8NumString+4;
+	}
+
+	for (i = 0;i < length;i ++) {
+		mmiFrameBufferDisplayFont((x+i*MMI_FRAMEBUFFER_DATA_WIDTH), y, (*(pNum+i)-0x30) + DB_DATA_0);
+	}
+}
+
+
 void mmiFrameBufferScrollDisplayData(int x, int y, U8 *u8NumString, int length) {
 	
-	x = 0;
+	//x = MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_X;
 	u8ScrollDisplayString = u8NumString;
 	u8ScrollDisplayIndex = 0;
 	u8ScrollDisplayLength = length;
 	u8ScrollDisplayHigh = y;
 
 	bPhoneScrollDisplay = 1;
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 	StartTimer(APOLLO_MMI_FRAMEBUFFER_SCROLL_TIMER, 5, mmiFrameBufferScroll);
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+	mmiFrameBufferDisplayPhoneNumberData(x, y, u8NumString, length);
+#endif
 }
 
 void mmiFrameBufferDisplayStatusBar(void) {
@@ -863,8 +1039,6 @@ void mmiFrameBufferDisplayStatusBar(void) {
 	mmiFrameBufferDisplayControls_Battery(u8Battery);
 	mmiFrameBufferDisplayControls_Signal(u8Signal);
 }
-
-
 
 U8 mmiFrameBufferDisplayData(int x, int y, U32 u32Data, U8 bZero) {
 	U8 u8BitCount = 0, i;
@@ -959,8 +1133,11 @@ void mmiFrameBufferMainPageDisplay(void) {
 	
 	mmiFrameBufferDisplayStatusBar();
 	mmiFrameBufferMainPageTimeDisplay();
-	
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 	gdi_layer_blt_previous(0, 0, MMI_FRAMEBUFFER_PANEL_WIDTH, MMI_FRAMEBUFFER_PANEL_HIGH);
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+	lcd_240240_refresh_all();
+#endif
 }
 
 /* ** **** ******** **************** Contacts **************** ******** **** ** */
@@ -978,14 +1155,22 @@ void mmiFrameBufferContactsDisplay(void) {
 	mmiFrameBufferClearDisplay();
 	
 	mmiFrameBufferContactsFontDisplay(u8PhoneBookIndex);
-	mmiFrameBufferScrollDisplayData(0, 80, u8ContactPhoneBook, strlen(u8ContactPhoneBook));
+	mmiFrameBufferScrollDisplayData(MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_X, MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_Y, u8ContactPhoneBook, strlen(u8ContactPhoneBook));
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 	gdi_layer_blt_previous(0, 0, MMI_FRAMEBUFFER_PANEL_WIDTH, MMI_FRAMEBUFFER_PANEL_HIGH);
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+	lcd_240240_refresh_all();
+#endif
 }
 
 /* ** **** ******** **************** CountStep **************** ******** **** ** */
 // SI_MGE		 IMG_SI_SMS_INDICATOR
 void mmiFrameBufferCountStepIconDisplay(void) {
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 	gdi_image_draw_id(MMI_FRAMEBUFFER_COUNTSTEP_ICON_X, MMI_FRAMEBUFFER_COUNTSTEP_ICON_Y, IMG_SI_SMS_INDICATOR);	
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+	mmiFrameBufferDisplayImage(MMI_FRAMEBUFFER_COUNTSTEP_ICON_X, MMI_FRAMEBUFFER_COUNTSTEP_ICON_Y, DB_IMAGE_STEPCOUNT);
+#endif
 }
 
 void mmiFrameBufferCountStepDataDisplay(U32 u32Data) {
@@ -994,10 +1179,10 @@ void mmiFrameBufferCountStepDataDisplay(U32 u32Data) {
 	
 	do {
 		if ((u32TempData / 10) || (u32TempData % 10)) {
-			mmiFrameBufferDisplayFont((MMI_FRAMEBUFFER_COUNTSTEP_DATA_WIDTH - (u8BitCount+1)*MMI_FRAMEBUFFER_DATA_WIDTH), MMI_FRAMEBUFFER_COUNTSTEP_DATA_Y, (u32TempData % 10) + DB_DATA_0);
+			mmiFrameBufferDisplayFont((MMI_FRAMEBUFFER_COUNTSTEP_DATA_X + MMI_FRAMEBUFFER_COUNTSTEP_DATA_WIDTH - (u8BitCount+1)*MMI_FRAMEBUFFER_DATA_WIDTH), MMI_FRAMEBUFFER_COUNTSTEP_DATA_Y, (u32TempData % 10) + DB_DATA_0);
 			u32TempData /= 10;
 		} else {
-			mmiFrameBufferDisplayFont((MMI_FRAMEBUFFER_COUNTSTEP_DATA_WIDTH - (u8BitCount+1)*MMI_FRAMEBUFFER_DATA_WIDTH), MMI_FRAMEBUFFER_COUNTSTEP_DATA_Y, DB_DATA_0);
+			mmiFrameBufferDisplayFont((MMI_FRAMEBUFFER_COUNTSTEP_DATA_X + MMI_FRAMEBUFFER_COUNTSTEP_DATA_WIDTH - (u8BitCount+1)*MMI_FRAMEBUFFER_DATA_WIDTH), MMI_FRAMEBUFFER_COUNTSTEP_DATA_Y, DB_DATA_0);
 		}
 		u8BitCount ++;
 	} while (u8BitCount < 8);
@@ -1011,8 +1196,12 @@ void mmiFrameBufferCountStepDisplay(void) {
 #endif
 	mmiFrameBufferCountStepIconDisplay();
 	mmiFrameBufferCountStepDataDisplay(step_num);
-
+	
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 	gdi_layer_blt_previous(0, 0, MMI_FRAMEBUFFER_PANEL_WIDTH, MMI_FRAMEBUFFER_PANEL_HIGH);
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+	lcd_240240_refresh_all();
+#endif
 }
 
 /* ** **** ******** **************** SOS **************** ******** **** ** */
@@ -1035,7 +1224,11 @@ void mmiFrameBufferStatusProcessDisplay(void) {
 	//clear
 	for (i = 0;i < MMI_FRAMEBUFFER_FONT_HIGH;i ++) {
 		for (j = 0;j < MMI_FRAMEBUFFER_PANEL_WIDTH;j ++) {
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 			gui_putpixel(j,MMI_FRAMEBUFFER_STATUSPROCESS_Y+i,UI_COLOR_BLACK);
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+			lcd_240240_draw_point(j, MMI_FRAMEBUFFER_STATUSPROCESS_Y+i, 0);
+#endif
 		}
 	}
 	for (i = 0;i < u8StatusProcessIndex;i ++) {
@@ -1046,7 +1239,13 @@ void mmiFrameBufferStatusProcessDisplay(void) {
 		u8StatusProcessIndex = 1;
 	}
 
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 	gdi_layer_blt_previous(0, 0, MMI_FRAMEBUFFER_PANEL_WIDTH, MMI_FRAMEBUFFER_PANEL_HIGH);
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+	//lcd_240240_refresh_all();
+	dis_onoff_flag = 1;
+	gdi_layer_blt_previous(0, 0, MMI_FRAMEBUFFER_PANEL_WIDTH, MMI_FRAMEBUFFER_PANEL_HIGH);
+#endif
 	StartTimer(APOLLO_MMI_FRAMEBUFFER_STATUSPROCESS_TIMER, 500, mmiFrameBufferStatusProcessDisplay);
 }
 
@@ -1062,35 +1261,43 @@ void mmiFrameBufferSOSDisplay(void) {
 
 /* ** **** ******** **************** CallOut **************** ******** **** ** */
 void mmiFrameBufferCallOutFontDisplay(void) {
-	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLOUT_X, MMI_FRAMEBUFFER_CALLOUT_Y, DB_FONT_DA);
-	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLOUT_X + MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_CALLOUT_Y, DB_FONT_DIAN);
-	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLOUT_X + 2 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_CALLOUT_Y, DB_FONT_HUA);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLOUT_X, MMI_FRAMEBUFFER_CALLOUT_Y, DB_FONT_ZHENG);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLOUT_X + MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_CALLOUT_Y, DB_FONT_ZAI);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLOUT_X + 2 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_CALLOUT_Y, DB_FONT_HU);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLOUT_X + 3 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_CALLOUT_Y, DB_FONT_JIAO);
 }
 
 
 void mmiFrameBufferCallOutDisplay(void) {
 	mmiFrameBufferClearDisplay();
-	//mmiFrameBufferCallOutFontDisplay();
+	mmiFrameBufferCallOutFontDisplay();
 
 	//mmiFrameBufferScrollDisplayData(0, 60, u8ContactPhoneBook, strlen(u8ContactPhoneBook));
+	mmiFrameBufferScrollDisplayData(MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_X, MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_Y, u8ContactPhoneBook, strlen(u8ContactPhoneBook));
 	
-	//bStatusProcessDynDisplay = 1;
-	//StartTimer(APOLLO_MMI_FRAMEBUFFER_STATUSPROCESS_TIMER, 500, mmiFrameBufferStatusProcessDisplay);
+	bStatusProcessDynDisplay = 1;
+	StartTimer(APOLLO_MMI_FRAMEBUFFER_STATUSPROCESS_TIMER, 500, mmiFrameBufferStatusProcessDisplay);
 }
 
 /* ** **** ******** **************** CallIn **************** ******** **** ** */
+S8 u8CallInPhoneNumber[PHONE_NUMBER_LENGTH] = {0};
+int u8CallInNumberLength = 0;
+
 void mmiFrameBufferCallInFontDisplay(void) {
 	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLIN_X, MMI_FRAMEBUFFER_CALLIN_Y, DB_FONT_LAI);
 	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLIN_X + MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_CALLIN_Y, DB_FONT_DIAN);
-	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLIN_X + 2 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_CALLIN_Y, DB_FONT_HUA);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLIN_X + 2 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_CALLIN_Y, DB_FONT_XIAN);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CALLIN_X + 3 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_CALLIN_Y, DB_FONT_SHI);
 }
 
 void mmiFrameBufferCallInDisplay(void) {
 	mmiFrameBufferClearDisplay();
 	mmiFrameBufferCallInFontDisplay();
 
-	//bStatusProcessDynDisplay = 1;
-	//StartTimer(APOLLO_MMI_FRAMEBUFFER_STATUSPROCESS_TIMER, 500, mmiFrameBufferStatusProcessDisplay);
+	mmiFrameBufferScrollDisplayData(MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_X, MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_Y, u8CallInPhoneNumber, u8CallInNumberLength);
+	
+	bStatusProcessDynDisplay = 1;
+	StartTimer(APOLLO_MMI_FRAMEBUFFER_STATUSPROCESS_TIMER, 500, mmiFrameBufferStatusProcessDisplay);
 }
 
 /* ** **** ******** **************** FallDown **************** ******** **** ** */
@@ -1107,17 +1314,36 @@ void mmiFrameBufferFallDownDisplay(void) {
 	StartTimer(APOLLO_MMI_FRAMEBUFFER_STATUSPROCESS_TIMER, 500, mmiFrameBufferStatusProcessDisplay);
 }
 
+/* ** **** ******** **************** No Contacts **************** ******** **** ** */
+void mmiFrameBufferReturnToMainPage(void) {
+	u8LcdUiStatusIndex = LCD_UI_STATUS_MAIN_MENU;
+	mmiFrameBufferReflush();
+}
+
+void mmiFrameBufferNoContactDisplay(void) {
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_NOCONTACTS_X, MMI_FRAMEBUFFER_NOCONTACTS_Y, DB_FONT_ZAN);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_NOCONTACTS_X + MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_NOCONTACTS_Y, DB_FONT_WU1);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_NOCONTACTS_X + 2 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_NOCONTACTS_Y, DB_FONT_LIAN);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_NOCONTACTS_X + 3 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_NOCONTACTS_Y, DB_FONT_XI);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_NOCONTACTS_X + 4 * MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_NOCONTACTS_Y, DB_FONT_REN);
+
+	StartTimer(APOLLO_RETURNTO_MAINPAGE_TIMER, 5000, mmiFrameBufferReturnToMainPage);
+}
+
+
 
 void mmiFrameBufferClearDisplay(void) {	
 	bChargingDynDisplay = 0;
 	bPhoneScrollDisplay = 0;
 	bStatusProcessDynDisplay = 0;
-	clear_screen_with_color(UI_COLOR_BLACK);
+	//clear_screen_with_color(UI_COLOR_BLACK);
+	lcd_240240_clear();
 }
 
+#if (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_64x128)
 void mmiFrameBufferDisplayFont(int x, int y, U16 FontCode) {
 	int i = 0,j = 0;
-	for (i = 0;i < 16;i ++) {
+	for (i = 0;i < MMI_FRAMEBUFFER_FONT_HIGH;i ++) {
 		if (FontCode >= DB_DATA_START && FontCode <= DB_DATA_END) { //0 ~ 9
 			for (j = 0;j < 8;j ++) {
 				if (((*(Font[FontCode]+i)) >> j) & 0x01) {
@@ -1152,8 +1378,123 @@ void mmiFrameBufferDisplayFont(int x, int y, U16 FontCode) {
 	gdi_layer_blt_previous(x, y, MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_FONT_HIGH);
 }
 
+#elif (MMI_FRAMEBUFFER_PANEL_TYPE==MMI_FRAMEBUFFER_PANEL_SIZE_240x240)
+
+void mmiFrameBufferDisplayFont(int x, int y, U16 FontCode) {
+	int i = 0,j = 0;
+	for (i = 0;i < MMI_FRAMEBUFFER_FONT_HIGH;i ++) {
+		if (FontCode >= DB_DATA_START && FontCode <= DB_DATA_END) { //0 ~ 9
+			for (j = 0;j < 8;j ++) {
+				if (((*(Font[FontCode]+2*i)) >> j) & 0x01) {
+					lcd_240240_draw_point(x+j,y+i,1);
+				}
+			}
+			for (j = 0;j < 8;j ++) {
+				if (((*(Font[FontCode]+2*i+1)) >> j) & 0x01) {
+					lcd_240240_draw_point(x+8+j,y+i,1);
+				}
+			}
+		} else if (FontCode >= DB_SYMBOL_START && FontCode <= DB_SYMBOL_END) {
+			for (j = 0;j < 8;j ++) {
+				if (((*(Font[FontCode]+2*i)) >> j) & 0x01) {
+					lcd_240240_draw_point(x+j,y+i,1);
+				}
+			}
+			for (j = 0;j < 8;j ++) {
+				if (((*(Font[FontCode]+2*i+1)) >> j) & 0x01) {
+					lcd_240240_draw_point(x+8+j,y+i,1);
+				}
+			}
+		} else if (FontCode >= DB_LETTER_START && FontCode <= DB_LETTER_END) {
+			for (j = 0;j < 8;j ++) {
+				if (((*(Font[FontCode]+2*i)) >> j) & 0x01) {
+					lcd_240240_draw_point(x+j,y+i,1);
+				}
+			}
+			for (j = 0;j < 8;j ++) {
+				if (((*(Font[FontCode]+2*i+1)) >> j) & 0x01) {
+					lcd_240240_draw_point(x+8+j,y+i,1);
+				}
+			}
+		} else if (FontCode >= DB_FONT_START && FontCode < DB_FONT_END){ // Font 
+			for (j = 0;j < 8;j ++) {
+				if (((*(Font[FontCode]+4*i)) >> j) & 0x01) {
+					lcd_240240_draw_point(x+j,y+i,1);
+				}
+			}
+			for (j = 0;j < 8;j ++) {
+				if (((*(Font[FontCode]+4*i+1)) >> j) & 0x01) {
+					lcd_240240_draw_point(x+8+j,y+i,1);
+				}
+			}
+			for (j = 0;j < 8;j ++) {
+				if (((*(Font[FontCode]+4*i+2)) >> j) & 0x01) {
+					lcd_240240_draw_point(x+16+j,y+i,1);
+				}
+			}
+			for (j = 0;j < 8;j ++) {
+				if (((*(Font[FontCode]+4*i+3)) >> j) & 0x01) {
+					lcd_240240_draw_point(x+24+j,y+i,1);
+				}
+			}
+		}
+	}
+	dis_onoff_flag = 1;
+	gdi_layer_blt_previous(x, y, MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_FONT_HIGH);
+}
+
+void mmiFrameBufferDisplayImage(int x, int y, U16 ImageCode) {
+	int i, j, k;
+	int width = Image[ImageCode].Width;
+	int high = Image[ImageCode].High;
+	unsigned char *pData = Image[ImageCode].gImageData;
+	U8 u8BitCount = (width-1) / 8 + 1;//(width/8) + ((width%8) ? 1 : 0);
+
+#if 0
+	for (i = 0;i < high;i ++) {
+		for (j = 0;j < 8;j ++) {
+			if (((*(pData+4*i)) >> j) & 0x01) {
+				lcd_240240_draw_point(x+8-j,y+i,1);
+			}
+		}
+		for (j = 0;j < 8;j ++) {
+			if (((*(pData+4*i+1)) >> j) & 0x01) {
+				lcd_240240_draw_point(x+16-j,y+i,1);
+			}
+		}
+		for (j = 0;j < 8;j ++) {
+			if (((*(pData+4*i+2)) >> j) & 0x01) {
+				lcd_240240_draw_point(x+24-j,y+i,1);
+			}
+		}
+		for (j = 0;j < 8;j ++) {
+			if (((*(pData+4*i+3)) >> j) & 0x01) {
+				lcd_240240_draw_point(x+32-j,y+i,1);
+			}
+		}
+	}
+#else
+	for (i = 0;i < high;i ++) {
+		for (k = 0;k < u8BitCount;k ++) {
+			for (j = 0;j < 8;j ++) {
+				if (((*(pData+u8BitCount*i+k)) >> j) & 0x01) {
+					lcd_240240_draw_point(x+(8*(k+1))-j,y+i,1);
+				}
+			}
+		}
+	}
+#endif
+	dis_onoff_flag = 1;
+	gdi_layer_blt_previous(x, y, width, high);
+}
+
+#endif
+//extern unsigned char dis_onoff_flag;
+
 void mmiFrameBufferReflush(void) {
 	//mmiFrameBufferClearDisplay();
+	dis_onoff_flag = 1;
+#if 1
 	switch (u8LcdUiStatusIndex) {
 		case LCD_UI_STATUS_MAIN_MENU: {	
 			mmiFrameBufferMainPageDisplay();
@@ -1183,7 +1524,18 @@ void mmiFrameBufferReflush(void) {
 			mmiFrameBufferFallDownDisplay();
 			break;
 		}
+		case LCD_UI_STATUS_NOCONTACTS: {
+			mmiFrameBufferNoContactDisplay();
+			break;
+		}
 	}
+#else
+	dis_onoff_flag = 1;
+	mmiFrameBufferClearDisplay();
+	mmiFrameBufferDisplayFont(30, 50, DB_FONT_XING);
+	//gdi_layer_blt_previous(0, 0, MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_FONT_HIGH);
+	lcd_240240_refresh_all();
+#endif
 }
 
 void mmiFrameBufferReflushTimer(void) {
@@ -1257,21 +1609,21 @@ U8 mmiKeyPadFindNextPhoneBookNumber(void) {
 
 U8 mmiKeyPadIsExistPhoneNumber(char *u8PhoneNumber) {
 	U8 i = 0;
-#if 0
+#if 1
 	for (i = 0;i < FAMILY_NUMBER_SIZE;i ++) {
-		if (!strstr(WatchInstance.u8FamilyNumber[i], u8PhoneNumber)) {
+		if (strstr(WatchInstance.u8FamilyNumber[i], u8PhoneNumber) != NULL) {
 			return 1;
 		}
 	}
 
 	for (i = 0;i < CONTACT_NUMBER_SIZE;i ++) {
-		if (!strstr(WatchInstance.u8ContactNumber[i], u8PhoneNumber)) {
+		if (strstr(WatchInstance.u8PhoneBook[i], u8PhoneNumber) != NULL) {
 			return 1;
 		}
 	}
 #endif
 	for (i = 0;i < CONTACT_NUMBER_SIZE;i ++) {
-		if (strstr(WatchInstance.u8ContactNumber[i], u8PhoneNumber)) {
+		if (strstr(WatchInstance.u8ContactNumber[i], u8PhoneNumber) != NULL) {
 			return 1;
 		}
 	}
@@ -1288,7 +1640,9 @@ void mmiKeyPadEventUpKeyA(void) {
 	if (u8LcdUiStatusIndex == LCD_UI_STATUS_MAIN_MENU) {
 		bExist = mmiKeyPadFindNextPhoneBookNumber();
 		if (!bExist) {
-			mmi_phb_popup_display_ext(STR_ID_PHB_NO_ENTRY_TO_SELECT,MMI_EVENT_FAILURE);
+			//mmi_phb_popup_display_ext(STR_ID_PHB_NO_ENTRY_TO_SELECT,MMI_EVENT_FAILURE);
+			u8LcdUiStatusIndex = LCD_UI_STATUS_NOCONTACTS;
+			mmiFrameBufferReflush();;
 			return ;
 		}
 		u8LcdUiStatusIndex = LCD_UI_STATUS_CONTACT;
@@ -1310,10 +1664,10 @@ void mmiKeyPadEventUpKeyA(void) {
 
 void mmiKeyPadEventLongPressKeyA(void) {
 	if (u8LcdUiStatusIndex == LCD_UI_STATUS_CONTACT) {
-		u8LcdUiStatusIndex = LCD_UI_STATUS_CALLOUT;
-		mmiFrameBufferReflush();
-		
 		YxAppMakeCall(0,u8ContactPhoneBook);
+		
+		u8LcdUiStatusIndex = LCD_UI_STATUS_CALLOUT;
+		mmiFrameBufferReflush();		
 	}
 }
 
@@ -3209,6 +3563,9 @@ void YxAppCallEndProc(void)
 		char isEnd = 1;
 		yxCallParam.callIndex++;
 		if(yxCallParam.callIndex < FAMILY_NUMBER_SIZE) {
+			u8LcdUiStatusIndex = LCD_UI_STATUS_SOS;
+			mmiFrameBufferReflush();
+			
 			YxAppMakeCall(0, WatchInstance.u8FamilyNumber[yxCallParam.callIndex]);
  		} else {
 			yxCallParam.callIndex = 0;
@@ -5765,9 +6122,11 @@ void YxAppSetAllowShutdown(void)
 	yxSystemSet.allowOff = 1;
 }
 
+//extern unsigned char dis_onoff_flag;
 char YxAppCheckAllowShutDown(void)
 {
 	//lcd_dis_on();
+	dis_onoff_flag = 3;
 
 	if(srv_nw_usab_is_usable(MMI_SIM1))
 	{
@@ -8001,7 +8360,8 @@ void gps_process(void)
 
 	if (mIndex-10 == LAT_LNG_LIST_SIZE-1) { //数据满
 
-		for (i = 0;i < LAT_LNG_LIST_SIZE;i ++) {
+		for (i = 0;i < LAT_LNG_LIST_SIZE;i ++) {
+
 			for (j = i+1;j < LAT_LNG_LIST_SIZE;j ++) {
 				if ((mLatLngList[i].lat + mLatLngList[i].lng) > (mLatLngList[j].lat + mLatLngList[j].lng)) {
 					tempLatLng.lat = mLatLngList[i].lat;
