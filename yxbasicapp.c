@@ -252,6 +252,8 @@ U8 recv_apollo_key[20] = {0};
 U8 apollo_key_ready = 0; //0 download key, 1 key ready
 U8 sos_key = 0; //press sos key
 U8 diedao_key = 0; 
+U16 u16DiedaoDeviceWorkPattern = 0; //Diedao Device
+U8 u8DiedaoDeviceBattery = 0;		//Diedao Device
 U32 step_num = 0;
 U32 sleep_quality = 0;
 //unsigned int Step_num = 0;
@@ -6016,11 +6018,33 @@ static MMI_BOOL Uart1_Interrupt(void *msg)
 		//for(iii=0;iii<rLen;iii++)
 
 		//Uart1_sends(rbuffer,rLen);
-		if(rbuffer[0] == 0x38 && rLen == 1)
+		if(rbuffer[0] == 0x38 && rLen == 1) //failed down
 		{
+			Uart1_sends(rbuffer,rLen);
 			YxAppSendMsgToMMIMod(APOLLO_MSG_FALLDOWN,0,0);
 			return MMI_TRUE;
 		}
+		if ((rbuffer[0] == 0xFF) && (rbuffer[1] + rbuffer[2] == 0xFF) && 
+			(rbuffer[3] == 0xFF) && (rLen == 4)) {
+			if (rbuffer[1] <= 100) { //battery		
+				Uart1_sends(rbuffer,rLen);		
+				u8DiedaoDeviceBattery = rbuffer[1];
+				return ;
+			} else if (rbuffer[1] == 0xA1) { //bluetooth match	
+				Uart1_sends(rbuffer,rLen);
+				YxAppSendMsgToMMIMod(APOLLO_MSG_BLUETOOTH_MATCH,0,0);
+			}
+		}
+
+		if ((rbuffer[0] == 0xA5) && (rbuffer[5] == 0xA5) && (rLen == 6)) {
+			if (rbuffer[1] == 0x6A && (rbuffer[1]+rbuffer[4] == 0xFF)) {
+				u16DiedaoDeviceWorkPattern = *(U16*)(rbuffer+2);
+			} else if (rbuffer[1] == 0x6B && (rbuffer[1]+rbuffer[4] == 0xFF)) {
+				u16DiedaoDeviceWorkPattern = *(U16*)(rbuffer+2);
+			}
+			return ;
+		}
+		
 #if 1 //Update By WangBoJing
 		if (save_flag & APOLLO_RUNKIND_VOICE_UPLOAD || YxAppGetRunFlag() & APOLLO_RUNKIND_VOICE_UPLOAD ){
 			//
@@ -10173,6 +10197,10 @@ static void YxMMIProcMsgHdler(void *msg)
 		YxAppMakeWithCallType(2,NULL);
 
 		diedao_key = 1;
+		break;
+	}
+	case APOLLO_MSG_BLUETOOTH_MATCH: {
+		//
 		break;
 	}
 

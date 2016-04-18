@@ -390,7 +390,7 @@ extern void motor_disen(void);
 #define  YX_HOST_NAME_MAX_LEN        40              //域名最大字符数
 
 #if 1//需要更改成你们的服务器IP与端口
-#define  YX_DOMAIN_NAME_DEFAULT      "120.76.25.198" //服务器域名或是ip地址,如:192.186.1.1
+#define  YX_DOMAIN_NAME_DEFAULT      "112.93.116.189" //服务器域名或是ip地址,如:192.186.1.1
 #define  YX_SERVER_PORT              8880            //服务器port,如果是HTTP服务器,端口默认为80,如果是通过CMWAP方式上网,则只能用HTTP服务器,并且端口一定要为80
 #define  APOLLO_BURNKEY_SERVER_IP		"120.76.25.198"
 #define  APOLLO_BURNKEY_SERVER_PORT	 5555
@@ -583,7 +583,7 @@ extern void motor_disen(void);
 #define APOLLO_BURN_KEY_MSG					0xA0
 #define APOLLO_MSG_FALLDOWN					0xA1
 #define APOLLO_MSG_LED_REFLASH				0xA2
-
+#define APOLLO_MSG_BLUETOOTH_MATCH			0xA3
 
 #define APOLLO_MSG_BUZZER_DEVICE_OPEN		0x81
 #define APOLLO_MSG_BUZZER_DEVICE_CLOSE		0x82

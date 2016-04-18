@@ -723,6 +723,11 @@ S32 Apollo_send_burnkey_package(U8 *sendBuf, U16 maxLen) {
 	return 8;
 }
 
+extern U8 YxAppGetSignalLevelInPercent(void);
+extern U16 u16DiedaoDeviceWorkPattern; //Diedao Device
+extern U8 u8DiedaoDeviceBattery;		//Diedao Device
+
+
 S32 Apollo_send_heart_package(U8 *sendBuf, U16 maxLen) {
 	//Apollo_set_burnkey();
 	int i = 0;
@@ -733,10 +738,14 @@ S32 Apollo_send_heart_package(U8 *sendBuf, U16 maxLen) {
 
 	heartHeader[10] = (diedao_key & 0x0F) | (sos_key & 0x0F << 4); //
 	heartHeader[11] = u16WatchStatusFlag & 0x00FF;
-	heartHeader[12] = u16WatchStatusFlag & 0xFF00 >> 8;
+	heartHeader[12] = (u16WatchStatusFlag & 0xFF00) >> 8;
 
 	Apollo_U32_datacpy(heartHeader+13, step_num); //set step num
-	Apollo_U32_datacpy(heartHeader+17, sleep_quality); //set sleep quality
+	//Apollo_U32_datacpy(heartHeader+17, sleep_quality); //set sleep quality
+	heartHeader[17] = u16DiedaoDeviceWorkPattern & 0x00FF;
+	heartHeader[18] = (u16DiedaoDeviceWorkPattern & 0xFF00) >> 8;
+	heartHeader[19] = u8DiedaoDeviceBattery;
+	heartHeader[20] = srv_nw_info_get_signal_strength_in_percentage(MMI_SIM1);
 	Apollo_U32_datacpy(heartHeader+24, timeDiff);
 
 	heartHeader[28] = blockDataFlag;
@@ -1702,6 +1711,7 @@ extern U8 u8NeedInitWatchTimeFlag;
 
 char phonenumber[20] = {0};
 extern void mmiFrameBufferReflushTimer(void);
+//extern void mmiClockGetDateTime(rtc_format_struct *pTime);
 
 S32 YxAppSockReadDataCallback(U8 *readBuf,U16 readLen,U8 *sendBuffer)//readBuf:´Ó·þÎñÆ÷¶ÁÈ¡µÄÊý¾Ý,readLen:Êý¾Ý³¤¶È,¿ÉÒÔÔÚ´Ë´¦ÀíÄãÃÇµÄÊý¾ÝÐ­Òé,sendBuffer:Èç¹ûÓÐÊý¾ÝÒªÉÏ´«µ½·þÎñÆ÷ÉÏ,ÇëÌîÐ´Êý¾Ýµ½´ËBUFFERÖÐ,×¢Òâ,´ËBUFFERµÄ×î´ó³¤¶ÈÎªYX_SOCK_BUFFER_LEN,·µ»ØÖµÎª0Ê±,²»ÒªÉÏ´«Êý¾Ý£¬°´SENDBUFFERµÄÊµ¼Ê³¤¶È×Ö½Ú·µ»Ø
 {
@@ -1721,6 +1731,7 @@ S32 YxAppSockReadDataCallback(U8 *readBuf,U16 readLen,U8 *sendBuffer)//readBuf:´
 	if (readBuf[0] == 'R' && readBuf[1] == 'E' && readBuf[2] == 'T' && readBuf[3] == 'O' && readBuf[4] == 'K') {
 		if ((readLen > 6) && u8NeedInitWatchTimeFlag) {
 			rtc_format_struct rtcTime = {0};
+			rtc_format_struct nowTime;
 			rtcTime.rtc_year = readBuf[6];
 			rtcTime.rtc_mon = readBuf[7]+1;
 			rtcTime.rtc_wday = readBuf[8];
@@ -1729,7 +1740,11 @@ S32 YxAppSockReadDataCallback(U8 *readBuf,U16 readLen,U8 *sendBuffer)//readBuf:´
 			rtcTime.rtc_min = readBuf[11];
 			rtcTime.rtc_sec = readBuf[12];
 
+			mmiClockGetDateTime(&nowTime);
 			mmiClockSetDateTime(&rtcTime);
+			if (nowTime.rtc_min != rtcTime.rtc_min) {
+				YxAppSendMsgToMMIMod(APOLLO_MSG_LED_REFLASH,0,0);
+			}
 			if (u8NeedInitWatchTimeFlag == 0x01) {
 				//ApolloStartGPS();
 				mmiFrameBufferReflushTimer();
