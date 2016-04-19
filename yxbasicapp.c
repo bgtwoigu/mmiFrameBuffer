@@ -733,7 +733,7 @@ void ApolloInitTime(void) {
 #define MMI_FRAMEBUFFER_MAINPAGE_WEEK_X		72
 #define MMI_FRAMEBUFFER_MAINPAGE_WEEK_Y		(MMI_FRAMEBUFFER_MAINPAGE_CLOCK_Y + MMI_FRAMEBUFFER_FONT_HIGH + 8)
 
-#define MMI_FRAMEBUFFER_CONTACTS_FONT_X		96
+#define MMI_FRAMEBUFFER_CONTACTS_FONT_X		80
 #define MMI_FRAMEBUFFER_CONTACTS_FONT_Y		80
 
 #define MMI_FRAMEBUFFER_CONTACTS_PHONENUMBER_X		31
@@ -764,7 +764,7 @@ void ApolloInitTime(void) {
 #define MMI_FRAMEBUFFER_NOCONTACTS_Y				80
 
 
-#define MMI_FRAMEBUFFER_FALLDOWN_X					32
+#define MMI_FRAMEBUFFER_FALLDOWN_X					72
 #define MMI_FRAMEBUFFER_FALLDOWN_Y					80
 
 
@@ -1145,7 +1145,7 @@ void mmiFrameBufferMainPageDisplay(void) {
 void mmiFrameBufferContactsFontDisplay(U8 u8Index) {
 	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CONTACTS_FONT_X, MMI_FRAMEBUFFER_CONTACTS_FONT_Y, DB_FONT_QIN);
 	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CONTACTS_FONT_X + MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_CONTACTS_FONT_Y, DB_FONT_REN);
-	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CONTACTS_FONT_X + MMI_FRAMEBUFFER_FONT_WIDTH * 2, MMI_FRAMEBUFFER_CONTACTS_FONT_Y, DB_DATA_0 + u8Index);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_CONTACTS_FONT_X + MMI_FRAMEBUFFER_FONT_WIDTH * 2 + MMI_FRAMEBUFFER_FONT_WIDTH/4, MMI_FRAMEBUFFER_CONTACTS_FONT_Y, DB_DATA_0 + u8Index);
 }
 
 static char u8ContactPhoneBook[PHONE_NUMBER_LENGTH] = {0};
@@ -1303,7 +1303,7 @@ void mmiFrameBufferCallInDisplay(void) {
 /* ** **** ******** **************** FallDown **************** ******** **** ** */
 void mmiFrameBufferFallDownFontDisplay(void) {
 	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_FALLDOWN_X, MMI_FRAMEBUFFER_FALLDOWN_Y, DB_FONT_SHUAI);
-	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_FALLDOWN_X + MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_FALLDOWN_Y, DB_FONT_DAO);
+	mmiFrameBufferDisplayFont(MMI_FRAMEBUFFER_FALLDOWN_X + 2*MMI_FRAMEBUFFER_FONT_WIDTH, MMI_FRAMEBUFFER_FALLDOWN_Y, DB_FONT_DAO);
 }
 
 void mmiFrameBufferFallDownDisplay(void) {
@@ -2585,7 +2585,7 @@ void YxAppStartSecondTimer(char start)
 static int led_light = 0;
 void YxAppHeartTickProc(void)
 {
-#if 1 //Led reflash Update By WangBoJing
+#if 0 //Led reflash Update By WangBoJing
 	if (led_light++ == 0) {
 		led1_off();
 		led2_on();
@@ -6610,7 +6610,8 @@ void Uart2_Interrupt(task_entry_struct * task_entry_ptr)
 					{
 					
 						//lcd_ui_status_flag = LCD_UI_STATUS_MAIN_MENU2;
-						YxAppSendMsgToMMIMod(APOLLO_MSG_LED_ON,0,0);
+						//YxAppSendMsgToMMIMod(APOLLO_MSG_LED_ON,0,0);
+						YxAppSendMsgToMMIMod(APOLLO_MSG_FALLDOWN,0,0);
 					}
 				}
 				//else Uart1_sends("uart4_int4\r\n",strlen("uart2_int4\r\n"));

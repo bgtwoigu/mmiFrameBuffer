@@ -321,7 +321,8 @@ void YxAppIdleInition(void)
 	//ApolloStartGPS();
 		//StartTimer( YX_HEART_TICK_UNIT*2,ApolloStartLab);
 #endif
-	
+
+	yaoyiyao_ini();	
 }
 
 void YxAppInitionParam(void)
